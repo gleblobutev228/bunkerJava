@@ -15,7 +15,6 @@ public class HttpLobbyController {
 
     @PostMapping("/create")
     public String createLobby(@Valid UserCreationRequest adminName){
-        lobbyService.createLobby(adminName);
         return "";
     }
 }
