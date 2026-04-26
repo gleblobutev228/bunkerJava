@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Бункер - Главная</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
+            background: #2c3e50;
+            color: white;
+        }
+        h1 { letter-spacing: 5px; margin-bottom: 30px; }
+
+        .container {
+            background: #34495e;
+            padding: 40px;
+            border-radius: 15px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.3);
+            text-align: center;
+        }
+
+        .input-group {
+            margin-bottom: 25px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        input {
+            padding: 12px 20px;
+            font-size: 1rem;
+            border: none;
+            border-radius: 5px;
+            outline: none;
+        }
+
+        .menu { display: flex; gap: 15px; flex-direction: column; }
+
+        button {
+            padding: 15px 30px;
+            font-size: 1.1rem;
+            font-weight: bold;
+            cursor: pointer;
+            border: none;
+            border-radius: 5px;
+            transition: transform 0.1s, background 0.3s;
+        }
+
+        button:active { transform: scale(0.95); }
+
+        .btn-create { background: #27ae60; color: white; }
+        .btn-create:hover { background: #2ecc71; }
+
+        .btn-join { background: #2980b9; color: white; }
+        .btn-join:hover { background: #3498db; }
+
+        .error-msg { color: #e74c3c; font-size: 0.9rem; margin-top: 10px; display: none; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>БУНКЕР ОНЛАЙН</h1>
+
+    <div class="input-group">
+        <label for="userName">Ваше имя в игре:</label>
+        <input type="text" id="userName" placeholder="Напр. Сталкер_77" minlength="1" maxlength="20">
+        <div id="error" class="error-msg"></div>
+    </div>
+
+    <div class="menu">
+        <button class="btn-create" onclick="createLobby()">СОЗДАТЬ ИГРУ</button>
+        <button class="btn-join" onclick="location.href='/lobbies.html'">К СПИСКУ ЛОББИ</button>
+    </div>
+</div>
+
+<script>
+    async function createLobby() {
+        const nameInput = document.getElementById('userName');
+        const errorDiv = document.getElementById('error');
+        const name = nameInput.value.trim();
+
+        // Базовая проверка перед отправкой
+        if (!name) {
+            showError("Введите имя!");
+            return;
+        }
+
+        try {
+            const response = await fetch('/api/lobbies/create', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                // Поле userName соответствует вашему Java DTO
+                body: JSON.stringify({
+                    userName: name
+                })
+            });
+
+            if (response.ok) {
+                const data = await response.json();
+                // Переходим на страницу лобби, передавая полученный код
+                window.location.href = `/lobby.html?code=${data.lobbyCode}`;
+            } else {
+                const errData = await response.json();
+                // Выводим ошибку валидации из Spring (если настроен обработчик)
+                showError(errData.message || "Ошибка при создании лобби");
+            }
+        } catch (error) {
+            console.error("Ошибка сети:", error);
+            showError("Сервер не отвечает");
+        }
+    }
+
+    function showError(text) {
+        const errorDiv = document.getElementById('error');
+        errorDiv.innerText = text;
+        errorDiv.style.display = 'block';
+        setTimeout(() => { errorDiv.style.display = 'none'; }, 3000);
+    }
+</script>
+</body>
+</html>

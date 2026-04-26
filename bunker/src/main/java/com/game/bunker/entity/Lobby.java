@@ -19,13 +19,17 @@ import java.util.Set;
 public class Lobby {
     @Id
     @Column(length = 6, unique = true, nullable = false)
-    private String id;
+    private String code;
 
     @Enumerated(EnumType.STRING)
     private LobbyStatus status;
 
     @OneToMany(mappedBy = "lobby", cascade = CascadeType.ALL, orphanRemoval = true)
     private Set<User> users = new HashSet<>();
+
+    @OneToOne
+    @JoinColumn(name = "admin_id", referencedColumnName = "id")
+    private User adminId;
 
 
     //helper methods

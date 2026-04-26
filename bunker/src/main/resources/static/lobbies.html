@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Список Лобби</title>
+    <style>
+        body { font-family: sans-serif; background: #34495e; color: white; padding: 20px; }
+        .lobby-card { background: #2c3e50; border: 1px solid #7f8c8d; padding: 15px; margin-bottom: 10px; border-radius: 8px; display: flex; justify-content: space-between; align-items: center; }
+        .btn-enter { background: #e67e22; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; }
+        #loader { font-style: italic; color: #bdc3c7; }
+    </style>
+</head>
+<body>
+<a href="/" style="color: #ecf0f1;">← Назад</a>
+<h1>Доступные лобби</h1>
+
+<div id="loader">Загрузка списка игр...</div>
+<div id="lobby-list"></div>
+
+<script>
+    async function loadLobbies() {
+        try {
+            // Вызов вашего контроллера
+            const response = await fetch('/api/lobbies');
+
+            if (response.status === 204) {
+                document.getElementById('lobby-list').innerHTML = '<p>Сейчас нет активных игр. Создайте свою!</p>';
+                return;
+            }
+
+            const lobbies = await response.json();
+            const listContainer = document.getElementById('lobby-list');
+            listContainer.innerHTML = ''; // Очищаем контейнер
+
+            lobbies.forEach(lobby => {
+                const card = document.createElement('div');
+                card.className = 'lobby-card';
+                card.innerHTML = `
+                    <div>
+                        <strong>Лобби #${lobby.id}</strong> — Игроков: ${lobby.playersCount}/12
+                    </div>
+                    <button class="btn-enter" onclick="joinLobby(${lobby.id})">Войти</button>
+                `;
+                listContainer.appendChild(card);
+            });
+        } catch (error) {
+            console.error('Ошибка:', error);
+            document.getElementById('lobby-list').innerHTML = '<p>Ошибка загрузки данных.</p>';
+        } finally {
+            document.getElementById('loader').style.display = 'none';
+        }
+    }
+
+    function joinLobby(id) {
+        alert('Входим в лобби ' + id);
+        // Здесь будет логика перехода в комнату
+    }
+
+    // Запуск при загрузке страницы
+    loadLobbies();
+</script>
+</body>
+</html>
