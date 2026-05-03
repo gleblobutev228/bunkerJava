@@ -38,11 +38,11 @@ public class HttpLobbyController {
         return ResponseEntity.ok(lobbies);
     }
 
-    @PostMapping("/join/{code}")
-    public ResponseEntity<LobbyJoiningResponseDto> joinLobby(@Valid @RequestBody UserCreationRequestDto dto, @PathVariable String code){
-        LobbyJoiningResponseDto response = lobbyService.joinLobby(dto, code);
-
-        return ResponseEntity.status(HttpStatus.CREATED).body(response);
-    }
+//    @PostMapping("/join/{code}")
+//    public ResponseEntity<LobbyJoiningResponseDto> joinLobby(@Valid @RequestBody UserCreationRequestDto dto, @PathVariable String code){
+//        LobbyJoiningResponseDto response = lobbyService.joinLobby(dto, code);
+//
+//        return ResponseEntity.status(HttpStatus.CREATED).body(response);
+//    }
 
 }

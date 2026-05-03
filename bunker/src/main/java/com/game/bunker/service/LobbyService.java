@@ -68,16 +68,16 @@ public class LobbyService {
     }
 
 
-    public LobbyJoiningResponseDto joinLobby(UserCreationRequestDto dto, String code){
-        User user = userService.createUser(dto);
-        user.setRoles(Set.of("ROLE_USER"));
-        userService.saveUser(user);
-
-        Lobby lobby = lobbyRepository.findByCode(code)
-                .orElseThrow(() -> new EntityNotFoundException("no such lobby with this code"));
-        lobby.addUser(user);
-
-    }
+//    public LobbyJoiningResponseDto joinLobby(UserCreationRequestDto dto, String code){
+//        User user = userService.createUser(dto);
+//        user.setRoles(Set.of("ROLE_USER"));
+//        userService.saveUser(user);
+//
+//        Lobby lobby = lobbyRepository.findByCode(code)
+//                .orElseThrow(() -> new EntityNotFoundException("no such lobby with this code"));
+//        lobby.addUser(user);
+//        return new LobbyJoiningResponseDto();
+//    }
 
 
 }

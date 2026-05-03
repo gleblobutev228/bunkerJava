@@ -17,8 +17,10 @@ import org.springframework.stereotype.Controller;
 public class WSLobbyHandler {
     private final SimpMessagingTemplate MessagingTemplate;
 
-    @MessageMapping("/topic/lobby.{code}.join")
+    @MessageMapping("/topic/lobby.{code}/join")
     public void joinLobby(@DestinationVariable String code,
                           @Payload @Valid LobbyMessage message,
-                          SimpMessageHeaderAccessor headerAccessor){}
+                          SimpMessageHeaderAccessor headerAccessor){
+
+    }
 }

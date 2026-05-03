@@ -26,14 +26,10 @@ public class JwtFilter extends OncePerRequestFilter {
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filter)
             throws ServletException, IOException {
-
         String token = null;
         if (request.getCookies() != null) {
-            token = Arrays.stream(request.getCookies())
-                    .filter(c -> "jwt_token".equals(c.getName()))
-                    .findFirst()
-                    .map(Cookie::getValue)
-                    .orElse(null);
+            token = jwtService.getTokenFromCookies(request.getCookies())
+                    .orElseThrow();
         }
 
         if (token != null && SecurityContextHolder.getContext().getAuthentication() == null) {

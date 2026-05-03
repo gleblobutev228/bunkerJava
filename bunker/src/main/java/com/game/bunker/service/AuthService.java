@@ -15,14 +15,12 @@ public class AuthService {
     private final UserService userService;
 
     public ResponseCookie createAuthCookie(UserCreationRequestDto dto) {
-        // Находим или создаем игрока
         User user = userService.getUserByNickname(dto.getUserName())
-                .orElseGet(() -> userService.createAndSaveUser(dto));
+                .orElseGet(() -> userService.createUser(dto));
+        user = userService.saveUser(user);
+        String token = jwtService.generateToken(user);
 
-        String token = jwtService.generateToken(dto);
-
-        // Формируем "адекватную" куку
-        return ResponseCookie.from("jwt_token", token)
+           return ResponseCookie.from("jwt_token", token)
                 .httpOnly(true)
                 .secure(false)
                 .path("/")
