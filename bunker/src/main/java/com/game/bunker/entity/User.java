@@ -1,40 +1,85 @@
 package com.game.bunker.entity;
 
-import jakarta.persistence.*;
-import lombok.AllArgsConstructor;
-import lombok.Getter;
-import lombok.NoArgsConstructor;
-import lombok.Setter;
 import org.jspecify.annotations.Nullable;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetails;
 
-import java.time.LocalDateTime;
 import java.util.Collection;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
-@Entity
-@Setter
-@Getter
-@Table(name = "users")
 public class User implements UserDetails {
+    public static final List<String> CHARACTERISTIC_NAMES = List.of(
+            "profession",
+            "bio",
+            "health",
+            "hobby",
+            "character",
+            "phobia",
+            "info",
+            "baggage",
+            "cards"
+    );
 
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
+    private String id;
+    private String nickname;
+    private boolean ready;
+    private String lobbyId;
+    private Map<String, UserCharacteristic> characteristics = new LinkedHashMap<>();
 
-    @Column(nullable = false)
-    private String userName;
+    public User() {
+    }
 
-    @Enumerated(EnumType.STRING)
-    private UserStatus status;
+    public User(String id, String nickname, boolean ready, String lobbyId,
+                Map<String, UserCharacteristic> characteristics) {
+        this.id = id;
+        this.nickname = nickname;
+        this.ready = ready;
+        this.lobbyId = lobbyId;
+        this.characteristics = characteristics;
+    }
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "lobby_id")
-    private Lobby lobby;
+    public String getId() {
+        return id;
+    }
 
-    private LocalDateTime creationTime;
+    public void setId(String id) {
+        this.id = id;
+    }
+
+    public String getNickname() {
+        return nickname;
+    }
+
+    public void setNickname(String nickname) {
+        this.nickname = nickname;
+    }
+
+    public boolean isReady() {
+        return ready;
+    }
+
+    public void setReady(boolean ready) {
+        this.ready = ready;
+    }
+
+    public String getLobbyId() {
+        return lobbyId;
+    }
+
+    public void setLobbyId(String lobbyId) {
+        this.lobbyId = lobbyId;
+    }
+
+    public Map<String, UserCharacteristic> getCharacteristics() {
+        return characteristics;
+    }
+
+    public void setCharacteristics(Map<String, UserCharacteristic> characteristics) {
+        this.characteristics = characteristics;
+    }
 
     @Override
     public Collection<? extends GrantedAuthority> getAuthorities() {
@@ -48,6 +93,6 @@ public class User implements UserDetails {
 
     @Override
     public String getUsername() {
-        return userName;
+        return nickname;
     }
 }
