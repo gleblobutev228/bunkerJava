@@ -3,12 +3,8 @@ package com.game.bunker.controller;
 import com.game.bunker.dto.AuthLoginRequest;
 import com.game.bunker.dto.AuthResponse;
 import com.game.bunker.dto.StartGameResponse;
-import com.game.bunker.entity.Lobby;
-import com.game.bunker.entity.User;
 import com.game.bunker.security.JwtFilter;
-import com.game.bunker.security.JwtProvider;
-import com.game.bunker.service.LobbyService;
-import com.game.bunker.service.UserService;
+import com.game.bunker.service.AuthService;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
@@ -25,44 +21,28 @@ import java.util.NoSuchElementException;
 @RestController
 @RequestMapping("/api/v1")
 public class AuthController {
-    private final LobbyService lobbyService;
-    private final UserService userService;
-    private final JwtProvider jwtProvider;
+    private final AuthService authService;
 
-    public AuthController(LobbyService lobbyService, UserService userService, JwtProvider jwtProvider) {
-        this.lobbyService = lobbyService;
-        this.userService = userService;
-        this.jwtProvider = jwtProvider;
+    public AuthController(AuthService authService) {
+        this.authService = authService;
     }
 
     @PostMapping("/auth/login")
     public ResponseEntity<AuthResponse> login(@Valid @RequestBody AuthLoginRequest request) {
-        Lobby lobby = resolveLobby(request.lobbyId());
-        User user = lobbyService.addUser(lobby.getId(), request.nickname());
-        String token = jwtProvider.generateToken(user.getId());
-        return ResponseEntity.ok(new AuthResponse(token, user, lobbyService.getLobby(lobby.getId())));
+        return ResponseEntity.ok(authService.login(request));
     }
 
     @GetMapping("/auth/reconnect")
     public ResponseEntity<AuthResponse> reconnect(HttpServletRequest request) {
         String userId = currentUserId(request);
-        User user = userService.getUser(userId);
-        Lobby lobby = lobbyService.getLobby(user.getLobbyId());
         String token = extractBearerToken(request);
-        return ResponseEntity.ok(new AuthResponse(token, user, lobby));
+        return ResponseEntity.ok(authService.reconnect(userId, token));
     }
 
     @PostMapping("/lobbies/{lobbyId}/start")
     public ResponseEntity<StartGameResponse> startGame(@PathVariable String lobbyId, HttpServletRequest request) {
         String userId = currentUserId(request);
-        return ResponseEntity.ok(lobbyService.startGame(lobbyId, userId));
-    }
-
-    private Lobby resolveLobby(String lobbyId) {
-        if (lobbyId == null || lobbyId.isBlank()) {
-            return lobbyService.createLobby();
-        }
-        return lobbyService.getLobby(lobbyId);
+        return ResponseEntity.ok(authService.startGame(lobbyId, userId));
     }
 
     private String currentUserId(HttpServletRequest request) {
@@ -89,6 +69,11 @@ public class AuthController {
     @org.springframework.web.bind.annotation.ExceptionHandler(NoSuchElementException.class)
     public ResponseEntity<String> handleNotFound(NoSuchElementException exception) {
         return ResponseEntity.status(HttpStatus.NOT_FOUND).body(exception.getMessage());
+    }
+
+    @org.springframework.web.bind.annotation.ExceptionHandler(IllegalArgumentException.class)
+    public ResponseEntity<String> handleBadRequest(IllegalArgumentException exception) {
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(exception.getMessage());
     }
 
     private static class UnauthorizedException extends RuntimeException {
