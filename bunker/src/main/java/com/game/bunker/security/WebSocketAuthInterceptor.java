@@ -5,9 +5,12 @@ import org.springframework.messaging.Message;
 import org.springframework.messaging.MessageChannel;
 import org.springframework.messaging.simp.stomp.StompCommand;
 import org.springframework.messaging.simp.stomp.StompHeaderAccessor;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.messaging.support.ChannelInterceptor;
 import org.springframework.messaging.support.MessageHeaderAccessor;
 import org.springframework.stereotype.Component;
+
+import java.util.List;
 
 @Component
 public class WebSocketAuthInterceptor implements ChannelInterceptor {
@@ -29,7 +32,7 @@ public class WebSocketAuthInterceptor implements ChannelInterceptor {
             return message;
         }
 
-        String token = resolveBearerToken(accessor);
+        String token = resolveToken(accessor);
         if (token == null || !jwtProvider.isValid(token)) {
             throw new IllegalArgumentException("JWT token is missing or invalid");
         }
@@ -38,16 +41,19 @@ public class WebSocketAuthInterceptor implements ChannelInterceptor {
         if (!userService.exists(userId)) {
             throw new IllegalArgumentException("User session has expired");
         }
-
-        accessor.setUser(new StompPrincipal(userId));
+        accessor.setUser(new UsernamePasswordAuthenticationToken(userId, null, List.of()));
         return message;
     }
 
-    private String resolveBearerToken(StompHeaderAccessor accessor) {
+    private String resolveToken(StompHeaderAccessor accessor) {
         String authorizationHeader = accessor.getFirstNativeHeader(AUTHORIZATION_HEADER);
-        if (authorizationHeader == null || !authorizationHeader.startsWith(BEARER_PREFIX)) {
-            return null;
+        if (authorizationHeader != null && authorizationHeader.startsWith(BEARER_PREFIX)) {
+            return authorizationHeader.substring(BEARER_PREFIX.length());
         }
-        return authorizationHeader.substring(BEARER_PREFIX.length());
+
+        Object jwt = accessor.getSessionAttributes() == null
+                ? null
+                : accessor.getSessionAttributes().get(JwtHandshakeInterceptor.JWT_ATTRIBUTE);
+        return jwt instanceof String token && !token.isBlank() ? token : null;
     }
 }

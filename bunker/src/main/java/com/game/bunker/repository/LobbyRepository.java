@@ -15,9 +15,14 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+/**
+ * Redis-репозиторий лобби.
+ * Хранит агрегат лобби в hash lobby:{id}, участников в set lobby:{id}:users
+ * и управляет TTL всей игровой комнаты.
+ */
 @Repository
 public class LobbyRepository {
-    public static final Duration SESSION_TTL = Duration.ofSeconds(7200);
+    public static final Duration SESSION_TTL = Duration.ofHours(3);
 
     private final StringRedisTemplate redisTemplate;
 
@@ -25,39 +30,92 @@ public class LobbyRepository {
         this.redisTemplate = redisTemplate;
     }
 
+    /**
+     * Сохраняет hash лобби и set участников без изменения TTL.
+     *
+     * @param lobby доменная модель лобби.
+     * @return сохраненное лобби.
+     *
+     * Call Chain:
+     * - Откуда (Inbound): LobbyService при создании или обновлении лобби.
+     * - Куда (Outbound): Redis hash lobby:{id}, Redis set lobby:{id}:users.
+     */
     public Lobby save(Lobby lobby) {
         String lobbyKey = lobbyKey(lobby.getId());
-        redisTemplate.opsForHash().putAll(lobbyKey, Map.of("status", lobby.getStatus().name().toLowerCase()));
+        // Spring Data Redis Hash хранит статус и администратора лобби.
+        redisTemplate.opsForHash().putAll(lobbyKey, Map.of(
+                "status", lobby.getStatus().name().toLowerCase(),
+                "admin_id", nullToEmpty(lobby.getAdminId())
+        ));
 
         String usersKey = lobbyUsersKey(lobby.getId());
         if (!lobby.getUserIds().isEmpty()) {
+            // Redis Set исключает дубли userId среди участников.
             redisTemplate.opsForSet().add(usersKey, lobby.getUserIds().toArray(String[]::new));
         }
 
         return lobby;
     }
 
+    /**
+     * Сохраняет новое лобби и выставляет стартовый TTL.
+     *
+     * @param lobby новое лобби.
+     * @return сохраненное лобби.
+     *
+     * Call Chain:
+     * - Откуда (Inbound): LobbyService.createLobby.
+     * - Куда (Outbound): Redis hash/set и expire для ключей лобби.
+     */
     public Lobby saveWithInitialTtl(Lobby lobby) {
         save(lobby);
         expireLobbyKeys(lobby.getId(), SESSION_TTL);
         return lobby;
     }
 
+    /**
+     * Загружает лобби из Redis по коду.
+     *
+     * @param lobbyId код лобби.
+     * @return Optional с лобби или empty, если hash отсутствует.
+     *
+     * Call Chain:
+     * - Откуда (Inbound): LobbyService, LobbySecurity.
+     * - Куда (Outbound): Redis hash lobby:{id}, Redis set lobby:{id}:users.
+     */
     public Optional<Lobby> findById(String lobbyId) {
+        // Hash lobby:{id} является признаком существования лобби.
         String status = (String) redisTemplate.opsForHash().get(lobbyKey(lobbyId), "status");
         if (status == null) {
             return Optional.empty();
         }
+        String adminId = (String) redisTemplate.opsForHash().get(lobbyKey(lobbyId), "admin_id");
 
         Set<String> userIds = redisTemplate.opsForSet().members(lobbyUsersKey(lobbyId));
         if (userIds == null) {
             userIds = new HashSet<>();
         }
 
-        return Optional.of(new Lobby(lobbyId, LobbyStatus.valueOf(status.toUpperCase()), userIds));
+        return Optional.of(new Lobby(
+                lobbyId,
+                LobbyStatus.valueOf(status.toUpperCase()),
+                adminId,
+                userIds
+        ));
     }
 
+    /**
+     * Возвращает все лобби с указанным статусом.
+     *
+     * @param status фильтр статуса.
+     * @return список найденных лобби.
+     *
+     * Call Chain:
+     * - Откуда (Inbound): LobbyService.getLobbiesByStatus.
+     * - Куда (Outbound): Redis keys lobby:* и findById для каждого hash.
+     */
     public List<Lobby> findAllByStatus(LobbyStatus status) {
+        // Redis keys используется для небольшого учебного проекта; в production лучше индексировать лобби по статусу.
         Set<String> keys = redisTemplate.keys("lobby:*");
         if (keys == null) {
             return List.of();
@@ -72,15 +130,101 @@ public class LobbyRepository {
                 .collect(Collectors.toList());
     }
 
+    /**
+     * Добавляет пользователя в set участников лобби.
+     *
+     * @param lobbyId код лобби.
+     * @param userId идентификатор пользователя.
+     *
+     * Call Chain:
+     * - Откуда (Inbound): LobbyService.addUser.
+     * - Куда (Outbound): Redis set lobby:{id}:users и expire.
+     */
     public void addUser(String lobbyId, String userId) {
+        // Redis Set хранит только идентификаторы участников, сами пользователи лежат в user:{id}.
         redisTemplate.opsForSet().add(lobbyUsersKey(lobbyId), userId);
         getRemainingTtl(lobbyId).ifPresent(ttl -> redisTemplate.expire(lobbyUsersKey(lobbyId), ttl));
     }
 
+    /**
+     * Обновляет статус лобби в Redis.
+     *
+     * @param lobbyId код лобби.
+     * @param status новый статус.
+     *
+     * Call Chain:
+     * - Откуда (Inbound): LobbyService.updateStatus, LobbyService.startGame.
+     * - Куда (Outbound): Redis hash lobby:{id}.
+     */
     public void updateStatus(String lobbyId, LobbyStatus status) {
         redisTemplate.opsForHash().put(lobbyKey(lobbyId), "status", status.name().toLowerCase());
     }
 
+    /**
+     * Назначает администратора лобби.
+     *
+     * @param lobbyId код лобби.
+     * @param adminId userId создателя лобби.
+     *
+     * Call Chain:
+     * - Откуда (Inbound): LobbyService.assignAdminIfMissing.
+     * - Куда (Outbound): Redis hash lobby:{id}.
+     */
+    public void updateAdminId(String lobbyId, String adminId) {
+        redisTemplate.opsForHash().put(lobbyKey(lobbyId), "admin_id", adminId);
+    }
+
+    /**
+     * Удаляет пользователя из set участников.
+     *
+     * @param lobbyId код лобби.
+     * @param userId идентификатор пользователя.
+     *
+     * Call Chain:
+     * - Откуда (Inbound): LobbyService.leaveLobby для обычного игрока.
+     * - Куда (Outbound): Redis set lobby:{id}:users.
+     */
+    public void removeUser(String lobbyId, String userId) {
+        redisTemplate.opsForSet().remove(lobbyUsersKey(lobbyId), userId);
+    }
+
+    /**
+     * Полностью удаляет Redis-состояние лобби.
+     *
+     * @param lobbyId код лобби.
+     *
+     * Call Chain:
+     * - Откуда (Inbound): LobbyService.leaveLobby при выходе администратора.
+     * - Куда (Outbound): Redis delete lobby:{id}, lobby:{id}:users.
+     */
+    public void deleteLobby(String lobbyId) {
+        redisTemplate.delete(List.of(lobbyKey(lobbyId), lobbyUsersKey(lobbyId)));
+    }
+
+    /**
+     * Увеличивает версию перемешивания карт.
+     *
+     * @param lobbyId код лобби.
+     * @return новая версия действия.
+     *
+     * Call Chain:
+     * - Откуда (Inbound): LobbyService.shuffleCards.
+     * - Куда (Outbound): Redis hash increment lobby:{id}.
+     */
+    public long updateCardsShuffleState(String lobbyId) {
+        Long version = redisTemplate.opsForHash().increment(lobbyKey(lobbyId), "cards_shuffle_version", 1);
+        return version == null ? 0 : version;
+    }
+
+    /**
+     * Продлевает TTL лобби и всех пользователей внутри.
+     *
+     * @param lobbyId код лобби.
+     *
+     * Call Chain:
+     * - Откуда (Inbound): LobbyService.startGame.
+     * - Куда (Outbound): Redis expire для lobby:{id}, lobby:{id}:users и user:{id}.
+     */
     public void extendGameTtl(String lobbyId) {
         expireLobbyKeys(lobbyId, SESSION_TTL);
         Set<String> userIds = redisTemplate.opsForSet().members(lobbyUsersKey(lobbyId));
@@ -92,6 +236,7 @@ public class LobbyRepository {
         for (String userId : userIds) {
             userKeys.add(userKey(userId));
         }
+        // Pipelined Redis-команды уменьшают количество round-trip при продлении TTL всех игроков.
         redisTemplate.executePipelined((RedisCallback<Object>) connection -> {
             for (String key : userKeys) {
                 connection.keyCommands().expire(redisTemplate.getStringSerializer().serialize(key), SESSION_TTL.toSeconds());
@@ -100,6 +245,16 @@ public class LobbyRepository {
         });
     }
 
+    /**
+     * Возвращает оставшееся время жизни лобби.
+     *
+     * @param lobbyId код лобби.
+     * @return Optional с TTL, если Redis сообщает положительное значение.
+     *
+     * Call Chain:
+     * - Откуда (Inbound): LobbyService.addUser.
+     * - Куда (Outbound): Redis TTL lobby:{id}.
+     */
     public Optional<Duration> getRemainingTtl(String lobbyId) {
         Long seconds = redisTemplate.getExpire(lobbyKey(lobbyId));
         if (seconds == null || seconds <= 0) {
@@ -123,5 +278,9 @@ public class LobbyRepository {
 
     private String userKey(String userId) {
         return "user:" + userId;
+    }
+
+    private String nullToEmpty(String value) {
+        return value == null ? "" : value;
     }
 }

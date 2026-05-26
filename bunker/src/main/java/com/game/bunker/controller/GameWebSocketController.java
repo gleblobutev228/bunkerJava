@@ -1,87 +1,66 @@
 package com.game.bunker.controller;
 
-import com.game.bunker.dto.StartGameResponse;
-import com.game.bunker.dto.ws.GameActionMessage;
-import com.game.bunker.dto.ws.GameStartedMessage;
+import com.game.bunker.dto.ws.LobbyChatRequest;
+import com.game.bunker.dto.ws.LobbyReadyRequest;
+import com.game.bunker.dto.ws.LobbyStatusRequest;
 import com.game.bunker.dto.ws.OpenCharacteristicRequest;
-import com.game.bunker.dto.ws.PersonalGameDataMessage;
-import com.game.bunker.entity.User;
-import com.game.bunker.security.JwtProvider;
-import com.game.bunker.service.AuthService;
-import com.game.bunker.service.UserService;
+import com.game.bunker.service.GameWebSocketService;
 import org.springframework.messaging.handler.annotation.DestinationVariable;
 import org.springframework.messaging.handler.annotation.MessageMapping;
-import org.springframework.messaging.simp.SimpMessagingTemplate;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Controller;
 
 import java.security.Principal;
 
 @Controller
 public class GameWebSocketController {
-    private final SimpMessagingTemplate messagingTemplate;
-    private final AuthService authService;
-    private final UserService userService;
-    private final JwtProvider jwtProvider;
+    private final GameWebSocketService gameWebSocketService;
 
-    public GameWebSocketController(SimpMessagingTemplate messagingTemplate,
-                                   AuthService authService,
-                                   UserService userService,
-                                   JwtProvider jwtProvider) {
-        this.messagingTemplate = messagingTemplate;
-        this.authService = authService;
-        this.userService = userService;
-        this.jwtProvider = jwtProvider;
+    public GameWebSocketController(GameWebSocketService gameWebSocketService) {
+        this.gameWebSocketService = gameWebSocketService;
+    }
+
+    @MessageMapping("/lobby/{lobbyId}/chat")
+    @PreAuthorize("@lobbySecurity.isMember(#lobbyId, authentication.name) and @lobbySecurity.isLobbyStage(#lobbyId)")
+    public void sendChatMessage(@DestinationVariable String lobbyId,
+                                LobbyChatRequest request,
+                                Principal principal) {
+        gameWebSocketService.sendChatMessage(lobbyId, request, principal);
+    }
+
+    @MessageMapping("/lobby/{lobbyId}/ready")
+    @PreAuthorize("@lobbySecurity.isMember(#lobbyId, authentication.name) and @lobbySecurity.isLobbyStage(#lobbyId)")
+    public void updateReadyState(@DestinationVariable String lobbyId,
+                                 LobbyReadyRequest request,
+                                 Principal principal) {
+        gameWebSocketService.updateReadyState(lobbyId, request, principal);
+    }
+
+    @MessageMapping("/lobby/{lobbyId}/status")
+    @PreAuthorize("@lobbySecurity.isAdmin(#lobbyId, authentication.name) and @lobbySecurity.isLobbyStage(#lobbyId)")
+    public void updateLobbyStatus(@DestinationVariable String lobbyId,
+                                  LobbyStatusRequest request,
+                                  Principal principal) {
+        gameWebSocketService.updateLobbyStatus(lobbyId, request, principal);
     }
 
     @MessageMapping("/lobby/{lobbyId}/start")
+    @PreAuthorize("@lobbySecurity.isAdmin(#lobbyId, authentication.name) and @lobbySecurity.isLobbyStage(#lobbyId)")
     public void startGame(@DestinationVariable String lobbyId, Principal principal) {
-        String userId = requireUserId(principal);
-        StartGameResponse response = authService.startGame(lobbyId, userId);
-
-        messagingTemplate.convertAndSend(
-                "/topic/game/" + lobbyId,
-                new GameStartedMessage(lobbyId, userId, response.lobby())
-        );
-
-        for (String playerId : response.lobby().getUserIds()) {
-            messagingTemplate.convertAndSendToUser(
-                    playerId,
-                    "/queue/reply",
-                    new PersonalGameDataMessage(jwtProvider.generateToken(playerId), userService.getUser(playerId))
-            );
-        }
+        gameWebSocketService.startGame(lobbyId, principal);
     }
 
-    @MessageMapping("/game/{lobbyId}/action")
+    @MessageMapping("/game/{lobbyId}/open-characteristic")
+    @PreAuthorize("@lobbySecurity.isMember(#lobbyId, authentication.name) and @lobbySecurity.isGameStage(#lobbyId)")
     public void openCharacteristic(@DestinationVariable String lobbyId,
                                    OpenCharacteristicRequest request,
                                    Principal principal) {
-        User actor = requireLobbyMember(lobbyId, principal);
-        userService.openCharacteristic(actor.getId(), request.characteristicName());
-
-        messagingTemplate.convertAndSend(
-                "/topic/game/" + lobbyId,
-                new GameActionMessage(
-                        lobbyId,
-                        actor.getId(),
-                        "OPEN_CHARACTERISTIC",
-                        userService.getVisibleUser(actor.getId())
-                )
-        );
+        gameWebSocketService.openCharacteristic(lobbyId, request, principal);
     }
 
-    private User requireLobbyMember(String lobbyId, Principal principal) {
-        User user = userService.getUser(requireUserId(principal));
-        if (!lobbyId.equals(user.getLobbyId())) {
-            throw new IllegalArgumentException("User does not belong to lobby: " + lobbyId);
-        }
-        return user;
-    }
-
-    private String requireUserId(Principal principal) {
-        if (principal == null || principal.getName() == null || principal.getName().isBlank()) {
-            throw new IllegalArgumentException("WebSocket user is not authenticated");
-        }
-        return principal.getName();
+    @MessageMapping("/game/{lobbyId}/shuffle-cards")
+    @PreAuthorize("@lobbySecurity.isAdmin(#lobbyId, authentication.name) and @lobbySecurity.isGameStage(#lobbyId)")
+    public void shuffleCards(@DestinationVariable String lobbyId, Principal principal) {
+        gameWebSocketService.shuffleCards(lobbyId, principal);
     }
 }

@@ -7,14 +7,16 @@ import java.util.Set;
 public class Lobby {
     private String id;
     private LobbyStatus status;
+    private String adminId;
     private Set<String> userIds = new HashSet<>();
 
     public Lobby() {
     }
 
-    public Lobby(String id, LobbyStatus status, Set<String> userIds) {
+    public Lobby(String id, LobbyStatus status, String adminId, Set<String> userIds) {
         this.id = id;
         this.status = status;
+        this.adminId = adminId;
         this.userIds = userIds;
     }
 
@@ -32,6 +34,14 @@ public class Lobby {
 
     public void setStatus(LobbyStatus status) {
         this.status = status;
+    }
+
+    public String getAdminId() {
+        return adminId;
+    }
+
+    public void setAdminId(String adminId) {
+        this.adminId = adminId;
     }
 
     public Set<String> getUserIds() {

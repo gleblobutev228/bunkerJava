@@ -7,8 +7,21 @@ import org.springframework.stereotype.Repository;
 
 import java.util.Optional;
 
+/**
+ * JPA-репозиторий каталога опыта работы.
+ * Участвует в генерации профессии и биографии игрока, подбирая случайное описание стажа.
+ */
 @Repository
 public interface ExperienceCatalogRepository extends JpaRepository<ExperienceCatalog, Long> {
+    /**
+     * Возвращает случайную запись опыта из каталога.
+     *
+     * @return Optional со случайным опытом, если каталог заполнен.
+     *
+     * Call Chain:
+     * - Откуда (Inbound): UserService.generateBioAndValidExperience.
+     * - Куда (Outbound): Spring Data JPA native query, таблица experience_catalog.
+     */
     @Query(value = "select * from experience_catalog order by random() limit 1", nativeQuery = true)
     Optional<ExperienceCatalog> findRandom();
 }

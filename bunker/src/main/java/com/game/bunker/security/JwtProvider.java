@@ -15,7 +15,7 @@ import java.util.Date;
 
 @Component
 public class JwtProvider {
-    public static final Duration TOKEN_TTL = Duration.ofSeconds(7200);
+    public static final Duration TOKEN_TTL = Duration.ofHours(3);
 
     private final SecretKey secretKey;
 

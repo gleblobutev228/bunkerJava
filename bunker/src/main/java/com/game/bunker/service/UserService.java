@@ -21,6 +21,11 @@ import java.util.UUID;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+/**
+ * Доменный сервис игроков.
+ * Генерирует персонажа для лобби, управляет ready-флагом, видимостью характеристик
+ * и жизненным циклом Redis-состояния пользователя.
+ */
 @Service
 public class UserService {
     private static final Duration DEFAULT_TTL = Duration.ofSeconds(7200);
@@ -55,6 +60,16 @@ public class UserService {
         this.characteristicCatalogRepository = characteristicCatalogRepository;
     }
 
+    /**
+     * Сохраняет готового пользователя с дефолтным TTL.
+     *
+     * @param user пользователь для сохранения.
+     * @return сохраненный пользователь.
+     *
+     * Call Chain:
+     * - Откуда (Inbound): внутренние сценарии сохранения готового User.
+     * - Куда (Outbound): UserRepository, Redis hash user:{id}.
+     */
     public User saveUser(User user){
         if (user.getId() == null || user.getId().isBlank()) {
             user.setId(UUID.randomUUID().toString());
@@ -62,30 +77,105 @@ public class UserService {
         return userRepository.saveWithTtl(user, DEFAULT_TTL);
     }
 
+    /**
+     * Генерирует нового игрока с характеристиками и сохраняет его в Redis.
+     *
+     * @param lobbyId код лобби, к которому относится игрок.
+     * @param nickname имя игрока.
+     * @param ttl TTL, синхронизированный с лобби.
+     * @return созданный игрок.
+     *
+     * Call Chain:
+     * - Откуда (Inbound): LobbyService.addUser.
+     * - Куда (Outbound): JPA catalog repositories, UserRepository, Redis hash user:{id}.
+     */
     public User generateAndSaveUser(String lobbyId, String nickname, Duration ttl) {
         String userId = UUID.randomUUID().toString();
         Map<String, String> hash = buildGeneratedUserHash(nickname, lobbyId);
         return userRepository.saveHashWithTtl(userId, hash, ttl);
     }
 
+    /**
+     * Открывает выбранную характеристику пользователя.
+     *
+     * @param userId идентификатор пользователя.
+     * @param charName имя характеристики.
+     *
+     * Call Chain:
+     * - Откуда (Inbound): GameWebSocketService.openCharacteristic.
+     * - Куда (Outbound): UserRepository, Redis hash user:{id}.
+     */
     public void openCharacteristic(String userId, String charName) {
         validateCharacteristicName(charName);
         userRepository.openCharacteristic(userId, charName);
     }
 
+    /**
+     * Меняет готовность игрока в лобби.
+     *
+     * @param userId идентификатор пользователя.
+     * @param ready новое значение готовности.
+     *
+     * Call Chain:
+     * - Откуда (Inbound): GameWebSocketService.updateReadyState.
+     * - Куда (Outbound): UserRepository, Redis hash user:{id}.
+     */
     public void setReady(String userId, boolean ready) {
         userRepository.setReady(userId, ready);
     }
 
+    /**
+     * Проверяет существование Redis-состояния пользователя.
+     *
+     * @param userId идентификатор пользователя.
+     * @return true, если пользователь существует.
+     *
+     * Call Chain:
+     * - Откуда (Inbound): WebSocketAuthInterceptor и LobbySessionService reconnect flow.
+     * - Куда (Outbound): UserRepository, Redis hasKey user:{id}.
+     */
     public boolean exists(String userId) {
         return userRepository.existsById(userId);
     }
 
+    /**
+     * Удаляет пользователя из Redis.
+     *
+     * @param userId идентификатор пользователя.
+     *
+     * Call Chain:
+     * - Откуда (Inbound): LobbyService.leaveLobby.
+     * - Куда (Outbound): UserRepository, Redis delete user:{id}.
+     */
+    public void deleteUser(String userId) {
+        userRepository.deleteById(userId);
+    }
+
+    /**
+     * Возвращает пользователя с закрытыми невидимыми характеристиками.
+     *
+     * @param userId идентификатор пользователя.
+     * @return публичное представление пользователя.
+     *
+     * Call Chain:
+     * - Откуда (Inbound): GameWebSocketService.openCharacteristic.
+     * - Куда (Outbound): UserRepository, Redis hash user:{id}.
+     */
     public User getVisibleUser(String userId) {
         return userRepository.findVisibleById(userId)
                 .orElseThrow(() -> new NoSuchElementException("User not found: " + userId));
     }
 
+    /**
+     * Возвращает полное состояние пользователя.
+     *
+     * @param userId идентификатор пользователя.
+     * @return пользователь из Redis.
+     *
+     * Call Chain:
+     * - Откуда (Inbound): LobbySessionService, GameWebSocketService, LobbyService.
+     * - Куда (Outbound): UserRepository, Redis hash user:{id}.
+     */
     public User getUser(String userId) {
         return userRepository.findById(userId)
                 .orElseThrow(() -> new NoSuchElementException("User not found: " + userId));

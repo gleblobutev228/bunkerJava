@@ -1,30 +1,64 @@
 package com.game.bunker.controller;
 
 
+import com.game.bunker.dto.AuthLoginRequest;
+import com.game.bunker.dto.AuthResponse;
 import com.game.bunker.dto.UserCreationRequest;
-import com.game.bunker.service.LobbyService;
+import com.game.bunker.service.LobbySessionService;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Controller;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.ResponseBody;
 
 @Controller
 public class HttpLobbyController {
-    private final LobbyService lobbyService;
+    private final LobbySessionService lobbySessionService;
 
-    public HttpLobbyController(LobbyService lobbyService) {
-        this.lobbyService = lobbyService;
+    public HttpLobbyController(LobbySessionService lobbySessionService) {
+        this.lobbySessionService = lobbySessionService;
     }
 
     @PostMapping("/create")
-    public String createLobby(@Valid UserCreationRequest adminName){
-        var lobby = lobbyService.createLobby(adminName);
-        return "redirect:/lobbies/" + lobby.getId();
+    public ResponseEntity<Void> createLobby(@Valid UserCreationRequest adminName) {
+        return lobbySessionService.createLobbyRedirect(adminName);
+    }
+
+    @PostMapping("/api/v1/lobbies")
+    @ResponseBody
+    public ResponseEntity<AuthResponse> createLobbyApi(@Valid @RequestBody UserCreationRequest request) {
+        return lobbySessionService.createLobby(request);
+    }
+
+    @PostMapping("/api/v1/lobbies/{lobbyId}/join")
+    @ResponseBody
+    public ResponseEntity<AuthResponse> joinLobby(@PathVariable String lobbyId,
+                                                  @Valid @RequestBody AuthLoginRequest request,
+                                                  HttpServletRequest httpRequest) {
+        return lobbySessionService.joinLobby(lobbyId, request, httpRequest);
     }
 
     @PostMapping("/lobbies/{lobbyId}/start")
-    public String startGame(@PathVariable String lobbyId) {
-        lobbyService.startGame(lobbyId);
-        return "redirect:/lobbies/" + lobbyId;
+    @PreAuthorize("@lobbySecurity.isAdmin(#lobbyId, authentication.name)")
+    public String startGame(@PathVariable String lobbyId, Authentication authentication) {
+        return lobbySessionService.startGameRedirect(lobbyId, authentication);
+    }
+
+    @PostMapping("/api/v1/lobbies/{lobbyId}/leave")
+    @PreAuthorize("@lobbySecurity.isMember(#lobbyId, authentication.name)")
+    @ResponseBody
+    public ResponseEntity<Void> leaveLobby(@PathVariable String lobbyId, Authentication authentication) {
+        return lobbySessionService.leaveLobby(lobbyId, authentication);
+    }
+
+    @PostMapping("/api/v1/auth/clear-cookie")
+    @ResponseBody
+    public ResponseEntity<Void> clearJwtCookieForClient() {
+        return lobbySessionService.clearJwtCookie();
     }
 }

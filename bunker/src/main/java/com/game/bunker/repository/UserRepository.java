@@ -11,6 +11,10 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
+/**
+ * Redis-репозиторий игроков.
+ * Хранит игрока в hash user:{id}, управляет TTL, ready-флагом и видимостью характеристик.
+ */
 @Repository
 public class UserRepository {
     private final StringRedisTemplate redisTemplate;
@@ -19,31 +23,96 @@ public class UserRepository {
         this.redisTemplate = redisTemplate;
     }
 
+    /**
+     * Сохраняет пользователя в Redis hash без изменения TTL.
+     *
+     * @param user доменная модель пользователя.
+     * @return сохраненный пользователь.
+     *
+     * Call Chain:
+     * - Откуда (Inbound): UserService, LobbyService.
+     * - Куда (Outbound): Redis hash user:{id}.
+     */
     public User save(User user) {
+        // Spring Data Redis Hash используется как плоское хранилище состояния игрока.
         redisTemplate.opsForHash().putAll(userKey(user.getId()), toHash(user));
         return user;
     }
 
+    /**
+     * Сохраняет пользователя и выставляет TTL.
+     *
+     * @param user доменная модель пользователя.
+     * @param ttl время жизни Redis-ключа.
+     * @return сохраненный пользователь.
+     *
+     * Call Chain:
+     * - Откуда (Inbound): UserService.saveUser, LobbyService.addUser.
+     * - Куда (Outbound): Redis hash user:{id} и expire.
+     */
     public User saveWithTtl(User user, Duration ttl) {
         save(user);
         redisTemplate.expire(userKey(user.getId()), ttl);
         return user;
     }
 
+    /**
+     * Сохраняет заранее собранный Redis hash пользователя и выставляет TTL.
+     *
+     * @param userId идентификатор пользователя.
+     * @param hash плоское представление пользователя.
+     * @param ttl время жизни Redis-ключа.
+     * @return восстановленная доменная модель пользователя.
+     *
+     * Call Chain:
+     * - Откуда (Inbound): UserService.generateAndSaveUser.
+     * - Куда (Outbound): Redis hash user:{id} и expire.
+     */
     public User saveHashWithTtl(String userId, Map<String, String> hash, Duration ttl) {
+        // Hash записывается напрямую, чтобы не собирать промежуточный User для сгенерированных характеристик.
         redisTemplate.opsForHash().putAll(userKey(userId), hash);
         redisTemplate.expire(userKey(userId), ttl);
         return fromHash(userId, toObjectMap(hash), false);
     }
 
+    /**
+     * Загружает полное состояние пользователя.
+     *
+     * @param userId идентификатор пользователя.
+     * @return Optional с пользователем или empty.
+     *
+     * Call Chain:
+     * - Откуда (Inbound): UserService.getUser, reconnect/join проверки.
+     * - Куда (Outbound): Redis hash user:{id}.
+     */
     public Optional<User> findById(String userId) {
         return findById(userId, false);
     }
 
+    /**
+     * Загружает публичное состояние пользователя со скрытыми закрытыми характеристиками.
+     *
+     * @param userId идентификатор пользователя.
+     * @return Optional с публичным представлением пользователя.
+     *
+     * Call Chain:
+     * - Откуда (Inbound): UserService.getVisibleUser, LobbyService.getVisibleLobbyUsers.
+     * - Куда (Outbound): Redis hash user:{id}.
+     */
     public Optional<User> findVisibleById(String userId) {
         return findById(userId, true);
     }
 
+    /**
+     * Загружает публичные состояния нескольких пользователей.
+     *
+     * @param userIds идентификаторы пользователей.
+     * @return список найденных публичных пользователей.
+     *
+     * Call Chain:
+     * - Откуда (Inbound): LobbyService.getVisibleLobbyUsers.
+     * - Куда (Outbound): Redis hash user:{id} для каждого участника.
+     */
     public List<User> findVisibleByIds(Iterable<String> userIds) {
         return toStream(userIds)
                 .map(this::findVisibleById)
@@ -51,16 +120,59 @@ public class UserRepository {
                 .toList();
     }
 
+    /**
+     * Проверяет наличие Redis-ключа пользователя.
+     *
+     * @param userId идентификатор пользователя.
+     * @return true, если user:{id} существует.
+     *
+     * Call Chain:
+     * - Откуда (Inbound): WebSocketAuthInterceptor, LobbySessionService, UserService.
+     * - Куда (Outbound): Redis hasKey.
+     */
     public boolean existsById(String userId) {
         return Boolean.TRUE.equals(redisTemplate.hasKey(userKey(userId)));
     }
 
+    /**
+     * Обновляет флаг готовности игрока.
+     *
+     * @param userId идентификатор пользователя.
+     * @param ready новое значение готовности.
+     *
+     * Call Chain:
+     * - Откуда (Inbound): UserService.setReady из WebSocket ready flow.
+     * - Куда (Outbound): Redis hash user:{id}.
+     */
     public void setReady(String userId, boolean ready) {
         redisTemplate.opsForHash().put(userKey(userId), "ready", Boolean.toString(ready));
     }
 
+    /**
+     * Делает характеристику игрока видимой.
+     *
+     * @param userId идентификатор пользователя.
+     * @param charName имя характеристики.
+     *
+     * Call Chain:
+     * - Откуда (Inbound): UserService.openCharacteristic.
+     * - Куда (Outbound): Redis hash user:{id}.
+     */
     public void openCharacteristic(String userId, String charName) {
         redisTemplate.opsForHash().put(userKey(userId), charName + ":visible", "1");
+    }
+
+    /**
+     * Удаляет Redis-состояние пользователя.
+     *
+     * @param userId идентификатор пользователя.
+     *
+     * Call Chain:
+     * - Откуда (Inbound): UserService.deleteUser при выходе игрока или админа.
+     * - Куда (Outbound): Redis delete user:{id}.
+     */
+    public void deleteById(String userId) {
+        redisTemplate.delete(userKey(userId));
     }
 
     private Optional<User> findById(String userId, boolean hideInvisible) {
