@@ -51,6 +51,14 @@ public class UserRepository {
                 .toList();
     }
 
+    public boolean existsById(String userId) {
+        return Boolean.TRUE.equals(redisTemplate.hasKey(userKey(userId)));
+    }
+
+    public void setReady(String userId, boolean ready) {
+        redisTemplate.opsForHash().put(userKey(userId), "ready", Boolean.toString(ready));
+    }
+
     public void openCharacteristic(String userId, String charName) {
         redisTemplate.opsForHash().put(userKey(userId), charName + ":visible", "1");
     }
@@ -94,7 +102,11 @@ public class UserRepository {
             String value = (String) hash.getOrDefault(name, "");
             boolean visible = "1".equals(hash.get(name + ":visible"));
             String description = (String) hash.get(name + ":description");
-            characteristics.put(name, new UserCharacteristic(hideInvisible && !visible ? null : value, visible, description));
+            if (hideInvisible && !visible) {
+                value = null;
+                description = null;
+            }
+            characteristics.put(name, new UserCharacteristic(value, visible, description));
         }
         user.setCharacteristics(characteristics);
 

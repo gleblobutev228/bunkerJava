@@ -73,6 +73,14 @@ public class UserService {
         userRepository.openCharacteristic(userId, charName);
     }
 
+    public void setReady(String userId, boolean ready) {
+        userRepository.setReady(userId, ready);
+    }
+
+    public boolean exists(String userId) {
+        return userRepository.existsById(userId);
+    }
+
     public User getVisibleUser(String userId) {
         return userRepository.findVisibleById(userId)
                 .orElseThrow(() -> new NoSuchElementException("User not found: " + userId));
