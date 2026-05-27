@@ -13,7 +13,6 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseCookie;
 import org.springframework.http.ResponseEntity;
-import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Service;
 
@@ -27,16 +26,16 @@ public class LobbySessionService {
     private final LobbyService lobbyService;
     private final UserService userService;
     private final JwtProvider jwtProvider;
-    private final SimpMessagingTemplate messagingTemplate;
+    private final RedisPubSubService redisPubSubService;
 
     public LobbySessionService(LobbyService lobbyService,
                                UserService userService,
                                JwtProvider jwtProvider,
-                               SimpMessagingTemplate messagingTemplate) {
+                               RedisPubSubService redisPubSubService) {
         this.lobbyService = lobbyService;
         this.userService = userService;
         this.jwtProvider = jwtProvider;
-        this.messagingTemplate = messagingTemplate;
+        this.redisPubSubService = redisPubSubService;
     }
 
     /**
@@ -169,9 +168,10 @@ public class LobbySessionService {
     private void notifyPlayersToClearJwt(String lobbyId, LobbyService.LeaveLobbyResult result) {
         for (String playerId : result.affectedUserIds()) {
             // STOMP user destination доставляет команду конкретному подключенному игроку.
-            messagingTemplate.convertAndSendToUser(
+            redisPubSubService.publishCriticalToUserWithRetry(
                     playerId,
                     "/queue/reply",
+                    RedisPubSubService.RedisWsEventType.CLEAR_JWT,
                     new ClientSessionCommandMessage("CLEAR_JWT", lobbyId, "LOBBY_ADMIN_LEFT")
             );
         }

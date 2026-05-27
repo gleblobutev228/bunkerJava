@@ -27,6 +27,6 @@ public class LobbySecurity {
     }
 
     public boolean isGameStage(String lobbyId) {
-        return lobbyService.getLobby(lobbyId).getStatus() == LobbyStatus.GAME_STARTED;
+        return lobbyService.getLobby(lobbyId).getStatus() == LobbyStatus.GAME;
     }
 }

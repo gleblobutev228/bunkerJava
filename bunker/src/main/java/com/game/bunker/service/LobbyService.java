@@ -1,5 +1,6 @@
 package com.game.bunker.service;
 
+import com.game.bunker.dto.ws.LobbyChatMessage;
 import com.game.bunker.entity.Lobby;
 import com.game.bunker.entity.LobbyStatus;
 import com.game.bunker.entity.User;
@@ -180,8 +181,8 @@ public class LobbyService {
      */
     public Lobby startGame(String lobbyId, String userId) {
         Lobby lobby = requireAdmin(lobbyId, userId);
-        lobby.setStatus(LobbyStatus.GAME_STARTED);
-        lobbyRepository.updateStatus(lobbyId, LobbyStatus.GAME_STARTED);
+        lobby.setStatus(LobbyStatus.GAME);
+        lobbyRepository.updateStatus(lobbyId, LobbyStatus.GAME);
         lobbyRepository.extendGameTtl(lobbyId);
         return lobby;
     }
@@ -238,6 +239,14 @@ public class LobbyService {
             throw new org.springframework.security.access.AccessDeniedException("Only lobby admin can perform this action");
         }
         return lobby;
+    }
+
+    public void addChatMessage(String lobbyId, LobbyChatMessage message) {
+        lobbyRepository.addChatMessage(lobbyId, message);
+    }
+
+    public List<LobbyChatMessage> getChatHistory(String lobbyId) {
+        return lobbyRepository.getChatHistory(lobbyId);
     }
 
     /**

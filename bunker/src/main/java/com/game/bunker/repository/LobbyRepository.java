@@ -1,13 +1,19 @@
 package com.game.bunker.repository;
 
+import com.game.bunker.dto.ws.LobbyChatMessage;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import com.game.bunker.entity.Lobby;
 import com.game.bunker.entity.LobbyStatus;
 import org.springframework.data.redis.core.RedisCallback;
+import org.springframework.data.redis.core.ListOperations;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Repository;
+import tools.jackson.databind.ObjectMapper;
 
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -22,12 +28,16 @@ import java.util.stream.Collectors;
  */
 @Repository
 public class LobbyRepository {
+    private static final Logger log = LoggerFactory.getLogger(LobbyRepository.class);
     public static final Duration SESSION_TTL = Duration.ofHours(3);
+    private static final int CHAT_HISTORY_LIMIT = 50;
 
     private final StringRedisTemplate redisTemplate;
+    private final ObjectMapper objectMapper;
 
-    public LobbyRepository(StringRedisTemplate redisTemplate) {
+    public LobbyRepository(StringRedisTemplate redisTemplate, ObjectMapper objectMapper) {
         this.redisTemplate = redisTemplate;
+        this.objectMapper = objectMapper;
     }
 
     /**
@@ -143,7 +153,10 @@ public class LobbyRepository {
     public void addUser(String lobbyId, String userId) {
         // Redis Set хранит только идентификаторы участников, сами пользователи лежат в user:{id}.
         redisTemplate.opsForSet().add(lobbyUsersKey(lobbyId), userId);
-        getRemainingTtl(lobbyId).ifPresent(ttl -> redisTemplate.expire(lobbyUsersKey(lobbyId), ttl));
+        getRemainingTtl(lobbyId).ifPresent(ttl -> {
+            redisTemplate.expire(lobbyUsersKey(lobbyId), ttl);
+            redisTemplate.expire(lobbyChatKey(lobbyId), ttl);
+        });
     }
 
     /**
@@ -198,7 +211,7 @@ public class LobbyRepository {
      * - Куда (Outbound): Redis delete lobby:{id}, lobby:{id}:users.
      */
     public void deleteLobby(String lobbyId) {
-        redisTemplate.delete(List.of(lobbyKey(lobbyId), lobbyUsersKey(lobbyId)));
+        redisTemplate.delete(List.of(lobbyKey(lobbyId), lobbyUsersKey(lobbyId), lobbyChatKey(lobbyId)));
     }
 
     /**
@@ -263,9 +276,42 @@ public class LobbyRepository {
         return Optional.of(Duration.ofSeconds(seconds));
     }
 
+    public void addChatMessage(String lobbyId, LobbyChatMessage message) {
+        try {
+            String chatKey = lobbyChatKey(lobbyId);
+            ListOperations<String, String> listOperations = redisTemplate.opsForList();
+            listOperations.leftPush(chatKey, objectMapper.writeValueAsString(message));
+            listOperations.trim(chatKey, 0, CHAT_HISTORY_LIMIT - 1);
+            getRemainingTtl(lobbyId).ifPresent(ttl -> redisTemplate.expire(chatKey, ttl));
+        } catch (Exception e) {
+            log.warn("Failed to store chat message in Redis list for lobbyId={}, reason={}", lobbyId, e.getMessage());
+        }
+    }
+
+    public List<LobbyChatMessage> getChatHistory(String lobbyId) {
+        List<LobbyChatMessage> result = new ArrayList<>();
+        try {
+            List<String> serializedMessages = redisTemplate.opsForList().range(lobbyChatKey(lobbyId), 0, CHAT_HISTORY_LIMIT - 1);
+            if (serializedMessages == null || serializedMessages.isEmpty()) {
+                return List.of();
+            }
+            List<String> messagesInReverseChronology = new ArrayList<>(serializedMessages);
+            // LPUSH хранит новые сообщения первыми, API чата отдает от старых к новым.
+            Collections.reverse(messagesInReverseChronology);
+            for (String serializedMessage : messagesInReverseChronology) {
+                result.add(objectMapper.readValue(serializedMessage, LobbyChatMessage.class));
+            }
+            return result;
+        } catch (Exception e) {
+            log.warn("Failed to load chat history from Redis list for lobbyId={}, reason={}", lobbyId, e.getMessage());
+            return result;
+        }
+    }
+
     private void expireLobbyKeys(String lobbyId, Duration ttl) {
         redisTemplate.expire(lobbyKey(lobbyId), ttl);
         redisTemplate.expire(lobbyUsersKey(lobbyId), ttl);
+        redisTemplate.expire(lobbyChatKey(lobbyId), ttl);
     }
 
     private String lobbyKey(String lobbyId) {
@@ -274,6 +320,10 @@ public class LobbyRepository {
 
     private String lobbyUsersKey(String lobbyId) {
         return "lobby:" + lobbyId + ":users";
+    }
+
+    private String lobbyChatKey(String lobbyId) {
+        return "lobby:" + lobbyId + ":chat";
     }
 
     private String userKey(String userId) {

@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bunker MVP</title>
+    <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+<div class="container">
+    <h1>Bunker MVP</h1>
+    <p class="hint">Минимальный интерфейс для ручной проверки API и WebSocket.</p>
+
+    <section class="card">
+        <h2>1. Создать лобби</h2>
+        <form id="create-form">
+            <label for="create-name">Имя администратора</label>
+            <input id="create-name" type="text" maxlength="20" required>
+            <button type="submit">Создать</button>
+        </form>
+    </section>
+
+    <section class="card">
+        <h2>2. Войти в лобби</h2>
+        <form id="join-form">
+            <label for="join-lobby-id">Код лобби</label>
+            <input id="join-lobby-id" type="text" required>
+            <label for="join-name">Никнейм</label>
+            <input id="join-name" type="text" maxlength="20" required>
+            <button type="submit">Войти</button>
+        </form>
+    </section>
+
+    <section class="card">
+        <h2>3. Текущая сессия</h2>
+        <div id="session-info" class="mono">Нет активной сессии</div>
+        <div class="row">
+            <button id="connect-ws-btn" type="button">Подключить WebSocket</button>
+            <button id="disconnect-ws-btn" type="button">Отключить WebSocket</button>
+            <button id="load-chat-btn" type="button">Загрузить историю чата</button>
+        </div>
+    </section>
+
+    <section class="card">
+        <h2>4. Действия в лобби</h2>
+        <div class="row">
+            <button id="ready-on-btn" type="button">Ready ON</button>
+            <button id="ready-off-btn" type="button">Ready OFF</button>
+            <button id="start-game-btn" type="button">Start Game</button>
+            <button id="shuffle-btn" type="button">Shuffle Cards</button>
+        </div>
+        <div class="row">
+            <button id="status-open-btn" type="button">Status OPEN</button>
+            <button id="status-close-btn" type="button">Status CLOSE</button>
+        </div>
+        <form id="open-characteristic-form" class="inline-form">
+            <label for="characteristic-name">Характеристика</label>
+            <input id="characteristic-name" type="text" placeholder="profession">
+            <button type="submit">Открыть</button>
+        </form>
+    </section>
+
+    <section class="card">
+        <h2>5. Чат</h2>
+        <form id="chat-form" class="inline-form">
+            <input id="chat-input" type="text" maxlength="500" placeholder="Сообщение..." required>
+            <button type="submit">Отправить</button>
+        </form>
+        <div id="chat-log" class="log"></div>
+    </section>
+
+    <section class="card">
+        <h2>События</h2>
+        <div id="event-log" class="log"></div>
+    </section>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@stomp/stompjs@7.2.0/bundles/stomp.umd.min.js"></script>
+<script src="/app.js"></script>
+</body>
+</html>

@@ -4,6 +4,8 @@ package com.game.bunker.controller;
 import com.game.bunker.dto.AuthLoginRequest;
 import com.game.bunker.dto.AuthResponse;
 import com.game.bunker.dto.UserCreationRequest;
+import com.game.bunker.dto.ws.LobbyChatMessage;
+import com.game.bunker.service.LobbyService;
 import com.game.bunker.service.LobbySessionService;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
@@ -11,17 +13,22 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Controller;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.ResponseBody;
 
+import java.util.List;
+
 @Controller
 public class HttpLobbyController {
     private final LobbySessionService lobbySessionService;
+    private final LobbyService lobbyService;
 
-    public HttpLobbyController(LobbySessionService lobbySessionService) {
+    public HttpLobbyController(LobbySessionService lobbySessionService, LobbyService lobbyService) {
         this.lobbySessionService = lobbySessionService;
+        this.lobbyService = lobbyService;
     }
 
     @PostMapping("/create")
@@ -60,5 +67,12 @@ public class HttpLobbyController {
     @ResponseBody
     public ResponseEntity<Void> clearJwtCookieForClient() {
         return lobbySessionService.clearJwtCookie();
+    }
+
+    @GetMapping("/api/v1/lobbies/{lobbyId}/chat")
+    @PreAuthorize("@lobbySecurity.isMember(#lobbyId, authentication.name)")
+    @ResponseBody
+    public ResponseEntity<List<LobbyChatMessage>> getChatHistory(@PathVariable String lobbyId) {
+        return ResponseEntity.ok(lobbyService.getChatHistory(lobbyId));
     }
 }

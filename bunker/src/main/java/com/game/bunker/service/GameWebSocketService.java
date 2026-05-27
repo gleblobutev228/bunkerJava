@@ -13,7 +13,6 @@ import com.game.bunker.dto.ws.OpenCharacteristicRequest;
 import com.game.bunker.entity.Lobby;
 import com.game.bunker.entity.LobbyStatus;
 import com.game.bunker.entity.User;
-import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.web.util.HtmlUtils;
 
@@ -29,14 +28,14 @@ import java.time.Instant;
 public class GameWebSocketService {
     private static final int MAX_CHAT_MESSAGE_LENGTH = 500;
 
-    private final SimpMessagingTemplate messagingTemplate;
+    private final RedisPubSubService redisPubSubService;
     private final LobbyService lobbyService;
     private final UserService userService;
 
-    public GameWebSocketService(SimpMessagingTemplate messagingTemplate,
+    public GameWebSocketService(RedisPubSubService redisPubSubService,
                                 LobbyService lobbyService,
                                 UserService userService) {
-        this.messagingTemplate = messagingTemplate;
+        this.redisPubSubService = redisPubSubService;
         this.lobbyService = lobbyService;
         this.userService = userService;
     }
@@ -55,16 +54,22 @@ public class GameWebSocketService {
      */
     public void sendChatMessage(String lobbyId, LobbyChatRequest request, Principal principal) {
         User sender = currentUser(principal);
-        // STOMP publish отправляет событие всем подписчикам лобби.
-        messagingTemplate.convertAndSend(
+        LobbyChatMessage message = new LobbyChatMessage(
+                lobbyId,
+                sender.getId(),
+                sender.getNickname(),
+                sanitizeChatMessage(request.message()),
+                Instant.now()
+        );
+        
+        // Сохраняем сообщение в историю чата в Redis
+        lobbyService.addChatMessage(lobbyId, message);
+
+        // STOMP publish отправляет событие всем подписчикам лобби через Redis.
+        redisPubSubService.publishChatBestEffort(
                 "/topic/lobby/" + lobbyId,
-                new LobbyChatMessage(
-                        lobbyId,
-                        sender.getId(),
-                        sender.getNickname(),
-                        sanitizeChatMessage(request.message()),
-                        Instant.now()
-                )
+                RedisPubSubService.RedisWsEventType.LOBBY_CHAT,
+                message
         );
     }
 
@@ -101,9 +106,10 @@ public class GameWebSocketService {
     public void updateLobbyStatus(String lobbyId, LobbyStatusRequest request, Principal principal) {
         String adminId = requireUserId(principal);
         Lobby lobby = lobbyService.updateStatus(lobbyId, parseLobbyStatus(request.status()), adminId);
-        // STOMP publish сообщает всем участникам о смене статуса лобби.
-        messagingTemplate.convertAndSend(
+        // STOMP publish сообщает всем участникам о смене статуса лобби через Redis.
+        redisPubSubService.publishCriticalBroadcastWithRetry(
                 "/topic/lobby/" + lobbyId,
+                RedisPubSubService.RedisWsEventType.LOBBY_STATUS_CHANGED,
                 new LobbyStatusMessage(lobbyId, adminId, lobby)
         );
     }
@@ -122,9 +128,10 @@ public class GameWebSocketService {
     public void startGame(String lobbyId, Principal principal) {
         String adminId = requireUserId(principal);
         Lobby lobby = lobbyService.startGame(lobbyId, adminId);
-        // Игровые события идут в отдельный topic, чтобы отделить их от фазы лобби.
-        messagingTemplate.convertAndSend(
+        // Игровые события идут в отдельный topic, чтобы отделить их от фазы лобби (через Redis).
+        redisPubSubService.publishCriticalBroadcastWithRetry(
                 "/topic/game/" + lobbyId,
+                RedisPubSubService.RedisWsEventType.GAME_STARTED,
                 new GameStartedMessage(lobbyId, adminId, lobby)
         );
     }
@@ -144,9 +151,10 @@ public class GameWebSocketService {
     public void openCharacteristic(String lobbyId, OpenCharacteristicRequest request, Principal principal) {
         User actor = currentUser(principal);
         userService.openCharacteristic(actor.getId(), request.characteristicName());
-        // STOMP publish сообщает всем игрокам о новом видимом состоянии персонажа.
-        messagingTemplate.convertAndSend(
+        // STOMP publish сообщает всем игрокам о новом видимом состоянии персонажа через Redis.
+        redisPubSubService.publishCriticalBroadcastWithRetry(
                 "/topic/game/" + lobbyId,
+                RedisPubSubService.RedisWsEventType.GAME_ACTION,
                 new GameActionMessage(
                         lobbyId,
                         actor.getId(),
@@ -171,8 +179,9 @@ public class GameWebSocketService {
         String adminId = requireUserId(principal);
         long version = lobbyService.shuffleCards(lobbyId, adminId);
         // Версия действия хранится в Redis и отправляется через STOMP для синхронизации клиентов.
-        messagingTemplate.convertAndSend(
+        redisPubSubService.publishCriticalBroadcastWithRetry(
                 "/topic/game/" + lobbyId,
+                RedisPubSubService.RedisWsEventType.ADMIN_GAME_ACTION,
                 new AdminGameActionMessage(lobbyId, adminId, "SHUFFLE_CARDS", version)
         );
     }
@@ -202,8 +211,9 @@ public class GameWebSocketService {
 
     private void publishLobbyState(String lobbyId) {
         // STOMP publish рассылает актуальный состав игроков всем подписчикам лобби.
-        messagingTemplate.convertAndSend(
+        redisPubSubService.publishCriticalBroadcastWithRetry(
                 "/topic/lobby/" + lobbyId,
+                RedisPubSubService.RedisWsEventType.LOBBY_STATE,
                 new LobbyStateMessage(lobbyId, lobbyService.getVisibleLobbyUsers(lobbyId))
         );
     }
