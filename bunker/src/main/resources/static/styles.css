@@ -96,6 +96,13 @@ button:hover {
     background: #1d4ed8;
 }
 
+button:disabled {
+    cursor: not-allowed;
+    opacity: 0.55;
+    background: #9ca3af;
+    border-color: #9ca3af;
+}
+
 .small {
     font-size: 12px;
     padding: 6px 8px;
@@ -106,6 +113,29 @@ button:hover {
     flex-wrap: wrap;
     gap: 8px;
     margin-top: 8px;
+}
+
+.action-group {
+    padding-top: 6px;
+    border-top: 1px dashed #d1d5db;
+}
+
+.toggle-btn.active {
+    background: #16a34a;
+    border-color: #16a34a;
+}
+
+.toggle-btn.active:hover {
+    background: #15803d;
+}
+
+.toggle-btn.inactive {
+    background: #ef4444;
+    border-color: #ef4444;
+}
+
+.toggle-btn.inactive:hover {
+    background: #dc2626;
 }
 
 .inline-form {

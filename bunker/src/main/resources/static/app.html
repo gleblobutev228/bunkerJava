@@ -75,15 +75,14 @@
                 <div class="card-head">
                     <h2>Лобби</h2>
                     <div class="row">
-                        <button id="connect-ws-btn" type="button">Подключить WS</button>
-                        <button id="disconnect-ws-btn" type="button">Отключить WS</button>
                         <button id="leave-lobby-btn" type="button">Покинуть лобби</button>
                     </div>
                 </div>
                 <div id="lobby-meta" class="mono">Лобби не выбрано</div>
-                <div class="row">
-                    <button id="ready-on-btn" type="button">Ready ON</button>
-                    <button id="ready-off-btn" type="button">Ready OFF</button>
+                <div id="lobby-player-actions" class="row action-group">
+                    <button id="ready-toggle-btn" type="button" class="toggle-btn inactive">Не готов</button>
+                </div>
+                <div id="lobby-admin-actions" class="row action-group hidden">
                     <button id="status-open-btn" type="button">Status OPEN</button>
                     <button id="status-close-btn" type="button">Status CLOSE</button>
                     <button id="start-game-btn" type="button">Start game</button>
@@ -116,6 +115,8 @@
                         <input id="characteristic-name" type="text" placeholder="profession" required>
                         <button type="submit">Открыть характеристику</button>
                     </form>
+                </div>
+                <div id="game-admin-actions" class="row action-group hidden">
                     <button id="shuffle-btn" type="button">Shuffle cards (admin)</button>
                 </div>
             </div>
