@@ -28,12 +28,23 @@
         loadChatBtn: document.getElementById("load-chat-btn"),
         chatForm: document.getElementById("chat-form"),
         chatInput: document.getElementById("chat-input"),
-        openCharacteristicForm: document.getElementById("open-characteristic-form"),
-        characteristicName: document.getElementById("characteristic-name"),
+        cardsTableBody: document.getElementById("cards-table-body"),
         shuffleBtn: document.getElementById("shuffle-btn"),
         lobbyAdminActions: document.getElementById("lobby-admin-actions"),
         gameAdminActions: document.getElementById("game-admin-actions")
     };
+
+    const characteristicOrder = [
+        "profession",
+        "bio",
+        "health",
+        "hobby",
+        "character",
+        "phobia",
+        "info",
+        "baggage",
+        "cards"
+    ];
 
     const state = {
         lobbyId: null,
@@ -43,6 +54,7 @@
         lobbyStatus: null,
         players: [],
         isReadyLocal: false,
+        selfCharacteristics: {},
         stompClient: null,
         subscriptions: [],
         wsState: "OFFLINE"
@@ -145,6 +157,68 @@
         state.isReadyLocal = Boolean(me && me.ready);
     }
 
+    function normalizeCharacteristics(rawCharacteristics) {
+        const normalized = {};
+        if (!rawCharacteristics || typeof rawCharacteristics !== "object") {
+            return normalized;
+        }
+        characteristicOrder.forEach((name) => {
+            const raw = rawCharacteristics[name] || {};
+            normalized[name] = {
+                value: raw.value ?? "",
+                visible: Boolean(raw.visible),
+                description: raw.description ?? ""
+            };
+        });
+        return normalized;
+    }
+
+    function mergeSelfCharacteristics(rawCharacteristics) {
+        const normalized = normalizeCharacteristics(rawCharacteristics);
+        characteristicOrder.forEach((name) => {
+            const previous = state.selfCharacteristics[name] || { value: "", visible: false, description: "" };
+            const next = normalized[name] || previous;
+            state.selfCharacteristics[name] = {
+                value: next.value || previous.value || "",
+                visible: next.visible || previous.visible,
+                description: next.description || previous.description || ""
+            };
+        });
+    }
+
+    function canOpenCharacteristics() {
+        return isInSession() && isGameStage() && isWsConnected();
+    }
+
+    function renderOwnCardsTable() {
+        if (!dom.cardsTableBody) {
+            return;
+        }
+        if (!isInSession()) {
+            dom.cardsTableBody.innerHTML = "<tr><td colspan=\"3\">Нет данных о картах</td></tr>";
+            return;
+        }
+
+        dom.cardsTableBody.innerHTML = characteristicOrder
+            .map((name) => {
+                const card = state.selfCharacteristics[name] || { value: "", visible: false, description: "" };
+                const visibleText = card.visible ? (card.value || "—") : "Скрыто";
+                const actionLabel = card.visible ? "Открыта" : "Открыть";
+                const tooltip = card.description
+                    ? card.description.replace(/"/g, "&quot;")
+                    : "Описание отсутствует";
+                const disabled = card.visible || !canOpenCharacteristics();
+                return (
+                    "<tr>" +
+                    `<td>${name}</td>` +
+                    `<td><span class="card-value-tip" title="${tooltip}">${visibleText}</span></td>` +
+                    `<td><button type="button" class="small open-card-btn" data-card-name="${name}" ${disabled ? "disabled" : ""}>${actionLabel}</button></td>` +
+                    "</tr>"
+                );
+            })
+            .join("");
+    }
+
     function updateReadyToggleUi() {
         dom.readyToggleBtn.textContent = state.isReadyLocal ? "Готов" : "Не готов";
         dom.readyToggleBtn.classList.remove("active", "inactive");
@@ -173,7 +247,6 @@
         setEnabled(dom.readyToggleBtn, inSession && lobbyStage && wsConnected);
         setEnabled(dom.loadChatBtn, inSession && lobbyStage);
         setFormEnabled(dom.chatForm, inSession && lobbyStage && wsConnected);
-        setFormEnabled(dom.openCharacteristicForm, inSession && gameStage && wsConnected);
 
         dom.lobbyAdminActions.classList.toggle("hidden", !admin);
         dom.gameAdminActions.classList.toggle("hidden", !admin);
@@ -183,6 +256,7 @@
         setEnabled(dom.shuffleBtn, admin && inSession && gameStage && wsConnected);
 
         updateReadyToggleUi();
+        renderOwnCardsTable();
     }
 
     function updateWsBadge(value) {
@@ -340,6 +414,7 @@
         state.nickname = auth.user.nickname;
         state.adminId = auth.lobby.adminId;
         state.lobbyStatus = auth.lobby.status;
+        mergeSelfCharacteristics(auth.user.characteristics);
         dom.joinLobbyId.value = state.lobbyId;
         dom.homeLobbyId.value = state.lobbyId;
         updateSessionInfo();
@@ -356,6 +431,7 @@
         state.lobbyStatus = null;
         state.players = [];
         state.isReadyLocal = false;
+        state.selfCharacteristics = {};
         updateSessionInfo();
     }
 
@@ -439,6 +515,10 @@
 
         if (Array.isArray(payload.players)) {
             state.players = payload.players;
+            const me = payload.players.find((player) => player.id === state.userId);
+            if (me && me.characteristics) {
+                mergeSelfCharacteristics(me.characteristics);
+            }
             renderPlayers();
             updateSessionInfo();
             return;
@@ -466,7 +546,11 @@
         }
 
         if (payload.action && payload.user) {
+            if (payload.actorId === state.userId && payload.user.characteristics) {
+                mergeSelfCharacteristics(payload.user.characteristics);
+            }
             logGame(`Игровое действие: ${payload.action}`, payload);
+            renderOwnCardsTable();
             return;
         }
 
@@ -694,16 +778,24 @@
         }
     });
 
-    dom.openCharacteristicForm.addEventListener("submit", (event) => {
-        event.preventDefault();
+    dom.cardsTableBody.addEventListener("click", (event) => {
+        const button = event.target.closest(".open-card-btn");
+        if (!button) {
+            return;
+        }
         try {
-            const characteristicName = dom.characteristicName.value.trim();
+            const characteristicName = button.dataset.cardName;
             if (!characteristicName) {
                 return;
             }
             sendStomp(`/app/game/${state.lobbyId}/open-characteristic`, { characteristicName });
+            if (!state.selfCharacteristics[characteristicName]) {
+                state.selfCharacteristics[characteristicName] = { value: "", visible: true, description: "" };
+            } else {
+                state.selfCharacteristics[characteristicName].visible = true;
+            }
+            renderOwnCardsTable();
             logGame(`Отправлено открытие характеристики: ${characteristicName}`);
-            dom.characteristicName.value = "";
         } catch (error) {
             logEvent(`Ошибка открытия характеристики: ${error.message}`);
         }

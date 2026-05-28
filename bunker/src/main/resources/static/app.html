@@ -110,11 +110,22 @@
         <section id="game-view" class="view hidden">
             <div class="card">
                 <h2>Игра</h2>
-                <div class="row">
-                    <form id="open-characteristic-form" class="inline-form">
-                        <input id="characteristic-name" type="text" placeholder="profession" required>
-                        <button type="submit">Открыть характеристику</button>
-                    </form>
+                <p class="hint">Ваши карты: можно открыть закрытую карту и посмотреть ее описание при наведении.</p>
+                <div class="table-wrap">
+                    <table class="cards-table">
+                        <thead>
+                        <tr>
+                            <th>Карта</th>
+                            <th>Значение</th>
+                            <th>Действие</th>
+                        </tr>
+                        </thead>
+                        <tbody id="cards-table-body">
+                        <tr>
+                            <td colspan="3">Нет данных о картах</td>
+                        </tr>
+                        </tbody>
+                    </table>
                 </div>
                 <div id="game-admin-actions" class="row action-group hidden">
                     <button id="shuffle-btn" type="button">Shuffle cards (admin)</button>

@@ -212,3 +212,33 @@ button:disabled {
     background: #fee2e2;
     color: #991b1b;
 }
+
+.table-wrap {
+    overflow-x: auto;
+    margin-top: 8px;
+}
+
+.cards-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 14px;
+    background: #f9fbff;
+}
+
+.cards-table th,
+.cards-table td {
+    border: 1px solid #dbe3ef;
+    padding: 8px 10px;
+    text-align: left;
+    vertical-align: middle;
+}
+
+.cards-table thead th {
+    background: #eef2ff;
+    font-weight: 700;
+}
+
+.card-value-tip {
+    border-bottom: 1px dashed #6b7280;
+    cursor: help;
+}
