@@ -1,201 +1,25 @@
-# Project Context: Bunker
+Bunker — это серверная часть многопользовательской игры «Бункер» с лобби, ролями игроков и пошаговыми действиями через WebSocket. В архитектуре разделены оперативное игровое состояние и справочные данные: живое состояние лобби, участников, карточек и готовности хранится в Redis, а каталоги для генерации персонажей, включая профессии, опыт и характеристики, хранятся в PostgreSQL. Основной бизнес-поток выглядит так: создается лобби, игроки подключаются, персонажи генерируются из каталогов, затем проходит стадия lobby с действиями ready, chat и status, после чего игра переходит в стадию game с открытием характеристик и административными действиями.
 
-## 1. System Overview
-`Bunker` — серверная часть многопользовательской игры "Бункер" с комнатами (lobby), ролями игроков и пошаговыми игровыми действиями через WebSocket.  
-Система разделяет **оперативное игровое состояние** (Redis: лобби, участники, карточки, готовность) и **справочные каталоги генерации персонажа** (PostgreSQL: профессии, опыт, характеристики).  
-Основной бизнес-поток: создание лобби -> вход игроков -> генерация персонажей из каталогов -> стадия lobby (ready/chat/status) -> стадия game (открытие характеристик, админ-действия).
+Технологический стек проекта включает Java 25, Maven со Spring Boot Maven Plugin и Spring Boot 4.0.3 как базовый framework, Spring Web MVC для HTTP API, Spring WebFlux для точечной реактивной инфраструктуры, Spring WebSocket и spring-security-messaging для realtime-взаимодействия, Spring Security и JWT с библиотекой jjwt 0.12.5 для аутентификации и авторизации, Redis через spring-boot-starter-data-redis для оперативного состояния и TTL, PostgreSQL как реляционную базу, Spring Data JPA для доступа к catalog-таблицам, Jakarta Validation для валидации DTO, H2 в тестовом окружении и Lombok как опциональное средство снижения шаблонного кода.
 
-## 2. Tech Stack & Environment
+Базовые параметры окружения задаются в application properties и через переменные окружения: spring.datasource.url по умолчанию равен ${POSTGRES_URL:jdbc:postgresql://localhost:5432/bunker}, spring.datasource.username — ${POSTGRES_USER:postgres}, spring.datasource.password — ${POSTGRES_PASSWORD:postgres}, spring.data.redis.host — localhost, spring.data.redis.port — 6379, jwt.secret берется из ${JWT_SECRET:...local-development...}, spring.jpa.hibernate.ddl-auto установлен в none, а spring.jpa.open-in-view — в false.
 
-| Layer | Technology | Version / Notes | Role |
-|---|---|---|---|
-| Runtime | Java | `25` (`pom.xml`) | Язык и рантайм приложения |
-| Build | Maven | Spring Boot Maven Plugin | Сборка, запуск, dependency management |
-| Core Framework | Spring Boot | Parent `4.0.3` | DI, конфигурация, web/security/data экосистема |
-| HTTP API | Spring Web MVC | starter `spring-boot-starter-webmvc` | REST/HTTP контроллеры |
-| Reactive/Web | Spring WebFlux | starter `spring-boot-starter-webflux` | Реактивная инфраструктура (точечно) |
-| Realtime | Spring WebSocket + Messaging | `spring-boot-starter-websocket`, `spring-security-messaging` | STOMP/WebSocket взаимодействие |
-| Auth/Security | Spring Security + JWT | `jjwt 0.12.5` | Аутентификация, авторизация, JWT-cookie flow |
-| Operational State Store | Redis | `spring-boot-starter-data-redis` | Хранение игровых сессий, TTL, ephemeral state |
-| Relational DB | PostgreSQL | runtime driver `org.postgresql` | Хранение каталогов для генерации персонажа |
-| ORM (catalog only) | Spring Data JPA | `spring-boot-starter-data-jpa` | Доступ к таблицам catalog |
-| Validation | Jakarta Validation | `spring-boot-starter-validation` | Валидация входных DTO |
-| Test DB | H2 | test scope | Локальные тестовые сценарии |
-| Boilerplate | Lombok | optional | Сокращение шаблонного кода (ограниченно) |
+Архитектурно проект реализован как слоистый монолит с четким разделением ответственности: HTTP-запросы идут по цепочке Controller -> LobbySessionService -> Domain Services -> Repositories, а WebSocket-запросы идут через GameWebSocketController -> GameWebSocketService -> Domain Services -> Repositories; при этом Redis используется для живого состояния с TTL, а PostgreSQL — для стабильных каталогов генерации.
 
-### Environment Baseline
+Пакеты разделены по ролям: controller, dto и dto.ws отвечают за транспортный слой HTTP и WebSocket, service выполняет оркестрацию сценариев create, join, start, leave, open и shuffle, entity и entity.catalog содержат доменные модели, repository и repository.catalog отвечают за Redis-runtime и JPA-каталоги соответственно, security и config реализуют JWT, фильтры, handshake-interceptor-ы и @PreAuthorize-проверки, а utils.generator содержит генерацию кода лобби и вспомогательные алгоритмы; основной код расположен в src/main/java/com/game/bunker, а конфигурация окружения в src/main/resources/application.properties.
 
-| Key | Default / Source | Purpose |
-|---|---|---|
-| `spring.datasource.url` | `${POSTGRES_URL:jdbc:postgresql://localhost:5432/bunker}` | Подключение к PostgreSQL |
-| `spring.datasource.username` | `${POSTGRES_USER:postgres}` | Пользователь БД |
-| `spring.datasource.password` | `${POSTGRES_PASSWORD:postgres}` | Пароль БД |
-| `spring.data.redis.host` | `localhost` | Redis host |
-| `spring.data.redis.port` | `6379` | Redis port |
-| `jwt.secret` | `${JWT_SECRET:...local-development...}` | Подпись JWT |
-| `spring.jpa.hibernate.ddl-auto` | `none` | DDL не автогенерируется Hibernate |
-| `spring.jpa.open-in-view` | `false` | Запрещен Open Session in View |
+В PostgreSQL используется постоянная схема с ddl-auto=none, то есть структура создается не через Hibernate-автогенерацию, а миграциями или ручным SQL. Таблица profession_catalog содержит id как BIGINT PK identity, value как обязательный VARCHAR и description как необязательный TEXT. Таблица experience_catalog содержит id как BIGINT PK identity и value как обязательный VARCHAR, используемый при генерации bio и experience. Таблица characteristic_catalog содержит id как BIGINT PK identity, type как обязательный VARCHAR для типов health, hobby, character, phobia, info, baggage и cards, value как обязательный VARCHAR и description как необязательный TEXT.
 
-## 3. Architecture & Code Structure
+Между catalog-таблицами не задано внешних ключей, и все три таблицы читаются как независимые lookup-пулы случайных значений при генерации пользователя. В Redis runtime-модель построена на ключах user:{userId}, lobby:{lobbyId} и lobby:{lobbyId}:users. Ключ user:{userId} хранится как hash и содержит nickname, ready, lobby_id, а также значения характеристик и служебные поля видимости и описания для каждой характеристики в форматах <charName>, <charName>:visible и <charName>:description, где charName ограничен набором profession, bio, health, hobby, character, phobia, info, baggage и cards.
 
-### Architectural Concept
-- Стиль: **слоистый монолит** с четким разделением ответственности.
-- Потоки:  
-  - HTTP: `Controller -> LobbySessionService -> Domain Services -> Repositories`  
-  - WebSocket: `GameWebSocketController -> GameWebSocketService -> Domain Services -> Repositories`
-- Данные:  
-  - Redis для "живого" состояния игры (с TTL).  
-  - PostgreSQL для стабильных каталогов генерации.
+Ключ lobby:{lobbyId} хранится как hash и содержит status в lowercase enum, admin_id и cards_shuffle_version. Ключ lobby:{lobbyId}:users хранится как set со значениями userId участников. Связи в runtime выглядят так: lobby:{id} связан с множеством участников через lobby:{id}:users, а user:{userId} связан с lobby через поле user.lobby_id.
 
-### Layer Responsibilities
+Политика TTL задает первоначальное время жизни лобби и сессий в 3 часа, синхронизирует TTL пользователя с остатком TTL лобби при создании и входе, а при startGame продлевает TTL для ключей лобби и всех связанных пользовательских ключей.
 
-| Layer | Packages | Responsibilities |
-|---|---|---|
-| Presentation | `controller`, `dto`, `dto.ws` | HTTP/WebSocket endpoint-ы, transport-DTO |
-| Application | `service` | Оркестрация сценариев (create/join/start/leave/open/shuffle) |
-| Domain Model | `entity`, `entity.catalog` | Игровые агрегаты и catalog entities |
-| Persistence | `repository`, `repository.catalog` | Redis-хранилище runtime-state + JPA-репозитории catalog |
-| Security | `security`, `config` | JWT, фильтры, handshake interceptors, `@PreAuthorize` проверки |
-| Utilities | `utils.generator` | Генерация кода лобби и вспомогательные алгоритмы |
+Обязательные правила разработки такие: нужно сохранять слоистую архитектуру и не допускать прямого обращения контроллеров к репозиториям, хранить runtime-данные только в Redis-репозиториях UserRepository и LobbyRepository без переноса состояния лобби в JPA-сущности, выполнять проверки прав через LobbySecurity и @PreAuthorize без ad-hoc-логики в контроллерах, согласовывать любые изменения статуса и членства лобби с TTL и keyspace-инвариантами Redis, создавать новые транспортные контракты отдельными DTO в dto и dto.ws, выбрасывать бизнес-ошибки типизированными исключениями Java вроде NoSuchElementException, IllegalArgumentException и AccessDeniedException с централизованной обработкой в exception handler, придерживаться стабильного нейминга сценарных методов create, join, start, leave, update, open и shuffle, использовать префиксы Redis-ключей user: и lobby:, не включать автоматическую DDL-генерацию без отдельного запроса на миграционную стратегию и сохранять обратную совместимость текущих Redis-ключей и hash-полей, не выполняя breaking rename без миграции состояния.
 
-### Mental Map (Folders)
+В проекте есть известный риск рассогласования статусов лобби: enum LobbyStatus содержит OPEN, CLOSE и GAME, а часть сервисов и security использует GAME_STARTED, поэтому любые изменения статусной модели нужно начинать с приведения enum и проверок к единому контракту.
 
-```text
-bunker/
-  src/main/java/com/game/bunker/
-    config/                  # Security/WebSocket config
-    controller/              # HTTP + WS controllers
-    dto/                     # HTTP DTO
-    dto/ws/                  # WS message contracts
-    entity/                  # Runtime domain models (Lobby, User, statuses)
-    entity/catalog/          # JPA entities for PostgreSQL catalog tables
-    repository/              # Redis repositories (runtime state)
-    repository/catalog/      # JPA repositories for catalogs
-    security/                # JWT, interceptors, security expressions
-    service/                 # Business orchestration and game flows
-    utils/generator/         # Lobby code generation
-  src/main/resources/
-    application.properties   # env-dependent config
-```
+Типовые рабочие запросы и ожидаемые действия включают генерацию SQL-миграций для profession_catalog, experience_catalog и characteristic_catalog с проверкой nullable, PK и индексов; добавление HTTP endpoint через DTO, метод в HttpLobbyController, оркестрацию в LobbySessionService или LobbyService и настройку security с validation; добавление WebSocket-действий через DTO в dto.ws, @MessageMapping в GameWebSocketController и бизнес-метод в GameWebSocketService; добавление новой характеристики через обновление whitelist в User.CHARACTERISTIC_NAMES и логики генерации в UserService с синхронизацией Redis hash-полей и каталогов; исправление авторизации через проверку JwtProvider, JwtFilter, handshake-interceptor-ов, cookie-flow и выражений @PreAuthorize; оптимизацию лобби через анализ Redis key access pattern, TTL-продления, pipelining и объема чтений keys("lobby:*"); а также ревью бизнес-логики через проверку инвариантов единственности администратора, удаления лобби и игроков при выходе администратора и валидации членства и стадий в security.
 
-## 4. Database Schema
-
-### 4.1 Persistent Relational Schema (PostgreSQL)
-
-> Примечание: в проекте включен `ddl-auto=none`; схема создается вне Hibernate-автогенерации (миграции/ручной SQL).
-
-#### Table: `profession_catalog`
-
-| Column | Type (logical) | Nullable | Constraints / Notes |
-|---|---|---|---|
-| `id` | `BIGINT` | No | PK, identity |
-| `value` | `VARCHAR` | No | Текст профессии |
-| `description` | `TEXT` | Yes | Доп. описание профессии |
-
-#### Table: `experience_catalog`
-
-| Column | Type (logical) | Nullable | Constraints / Notes |
-|---|---|---|---|
-| `id` | `BIGINT` | No | PK, identity |
-| `value` | `VARCHAR` | No | Опыт работы (строка, используется в генерации bio/experience) |
-
-#### Table: `characteristic_catalog`
-
-| Column | Type (logical) | Nullable | Constraints / Notes |
-|---|---|---|---|
-| `id` | `BIGINT` | No | PK, identity |
-| `type` | `VARCHAR` | No | Тип характеристики (`health`,`hobby`,`character`,`phobia`,`info`,`baggage`,`cards`) |
-| `value` | `VARCHAR` | No | Значение карточки |
-| `description` | `TEXT` | Yes | Расширенное описание карточки |
-
-#### Relational ERD (text)
-
-```text
-profession_catalog (independent lookup)
-experience_catalog (independent lookup)
-characteristic_catalog (independent lookup by type)
-
-No declared FK relations between catalog tables.
-All three tables are read as random/value pools during user generation.
-```
-
-### 4.2 Runtime State Model (Redis)
-
-#### Keyspace: `user:{userId}` (Hash)
-
-| Field | Type | Meaning |
-|---|---|---|
-| `nickname` | string | Никнейм игрока |
-| `ready` | boolean-string | Готовность игрока |
-| `lobby_id` | string | ID лобби |
-| `<charName>` | string | Значение характеристики |
-| `<charName>:visible` | `"0"`/`"1"` | Флаг видимости характеристики |
-| `<charName>:description` | string | Описание характеристики (если есть) |
-
-`charName` из фиксированного набора: `profession`, `bio`, `health`, `hobby`, `character`, `phobia`, `info`, `baggage`, `cards`.
-
-#### Keyspace: `lobby:{lobbyId}` (Hash)
-
-| Field | Type | Meaning |
-|---|---|---|
-| `status` | string | Статус лобби (lowercase enum) |
-| `admin_id` | string | userId администратора |
-| `cards_shuffle_version` | integer | Версия админ-действия shuffle |
-
-#### Keyspace: `lobby:{lobbyId}:users` (Set)
-
-| Value | Meaning |
-|---|---|
-| `userId` | Участник лобби |
-
-#### Runtime ERD (text)
-
-```text
-lobby:{id} (hash) 1 --- N lobby:{id}:users (set members userId)
-user:{userId} (hash) N --- 1 lobby:{id} via field user.lobby_id
-
-TTL policy:
-- initial lobby/session TTL: 3h
-- user TTL synchronized to lobby remaining TTL on join/create
-- startGame extends TTL for lobby keys + all user keys
-```
-
-## 5. Constraints & Development Rules
-
-### Mandatory Coding Rules for AI
-- Соблюдать существующую слоистую схему: контроллеры не должны обращаться к репозиториям напрямую.
-- Runtime-данные игры хранить только в Redis-репозиториях (`UserRepository`, `LobbyRepository`); не переносить состояние лобби в JPA-сущности.
-- Любые проверки прав выполнять через `LobbySecurity`/`@PreAuthorize`; не дублировать ad-hoc auth-логику в контроллерах.
-- Любые изменения статуса/членства лобби должны быть согласованы с TTL и keyspace-инвариантами Redis.
-- Для новых transport-контрактов использовать отдельные DTO в `dto`/`dto.ws`, не отдавать доменные модели напрямую.
-- Ошибки бизнес-уровня выбрасывать как типизированные Java exceptions (`NoSuchElementException`, `IllegalArgumentException`, `AccessDeniedException`) и централизованно обрабатывать в exception handler.
-- Поддерживать детерминированный нейминг:  
-  - методы-сценарии в сервисах: `create/join/start/leave/update/open/shuffle`;  
-  - ключи Redis: префиксы `user:` и `lobby:`.
-- Не включать автоматическую DDL-генерацию (`ddl-auto` остается `none`) без отдельного запроса на миграционную стратегию.
-- Сохранять совместимость текущих ключей Redis и полей hash (breaking rename запрещен без миграции состояния).
-
-### Known Consistency Risk (must verify before edits)
-- В кодовой базе есть потенциальный drift статусов лобби:  
-  - `LobbyStatus` содержит `OPEN/CLOSE/GAME`,  
-  - часть сервисов/безопасности использует `GAME_STARTED`.  
-  При любых правках, затрагивающих статусную модель, сначала привести enum и проверки к единому контракту.
-
-## 6. Common Tasks
-
-| User Intent | Expected AI Action Pattern |
-|---|---|
-| "Напиши миграцию для catalog таблиц" | Сгенерировать SQL migration для PostgreSQL (`profession_catalog`, `experience_catalog`, `characteristic_catalog`), проверить nullable/PK/indexes |
-| "Создай новый HTTP endpoint" | Добавить DTO -> метод в `HttpLobbyController` -> orchestration в `LobbySessionService`/`LobbyService` -> security/validation |
-| "Добавь новое WebSocket действие" | Добавить request/response DTO в `dto.ws` -> `@MessageMapping` в `GameWebSocketController` -> бизнес-метод в `GameWebSocketService` |
-| "Добавь новую характеристику персонажа" | Обновить whitelist характеристик в `User.CHARACTERISTIC_NAMES` и генерацию в `UserService`, синхронизировать Redis hash-поля и каталоги |
-| "Почини авторизацию" | Проверить `JwtProvider`, `JwtFilter`, handshake interceptors, cookie flow и `@PreAuthorize` выражения |
-| "Оптимизируй работу лобби" | Проверить Redis key access patterns, TTL продление, pipelining, объем чтений `keys("lobby:*")` |
-| "Сделай ревью бизнес-логики" | Проверить инварианты: админ назначается один раз, выход админа удаляет лобби и игроков, членство и стадии валидируются в security |
-
-### Prompt Templates (for future AI sessions)
-- `Сгенерируй migration SQL для PostgreSQL под новую колонку в characteristic_catalog + rollback.`
-- `Добавь endpoint POST /api/v1/lobbies/{id}/... с валидацией DTO и проверкой прав через @PreAuthorize.`
-- `Добавь WebSocket команду для стадии game и отправку broadcast-сообщения всем участникам.`
-- `Проверь согласованность enum статусов lobby между service, security и Redis serialization.`
-- `Напиши unit/integration тесты для сценария "админ выходит из лобби".`
+Для будущих AI-сессий в проекте используются шаблоны задач на генерацию migration SQL с rollback для characteristic_catalog, добавление endpoint формата POST /api/v1/lobbies/{id}/... с DTO-валидацией и @PreAuthorize, добавление WebSocket-команды для стадии game с broadcast всем участникам, проверку согласованности enum-статусов lobby между service, security и Redis serialization и написание unit и integration тестов для сценария выхода админа из лобби.
