@@ -10,7 +10,7 @@ body {
 }
 
 .container {
-    max-width: 980px;
+    max-width: 1080px;
     margin: 24px auto;
     padding: 0 12px 24px;
 }
@@ -24,12 +24,47 @@ h1, h2 {
     color: #4b5563;
 }
 
+.topbar {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    align-items: flex-start;
+    margin-bottom: 12px;
+}
+
+.status-box {
+    min-width: 320px;
+}
+
+.tabs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 12px;
+}
+
 .card {
     background: #fff;
     border: 1px solid #d1d5db;
     border-radius: 8px;
     padding: 16px;
     margin-bottom: 12px;
+}
+
+.card-head {
+    display: flex;
+    justify-content: space-between;
+    gap: 10px;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+.view {
+    margin-bottom: 12px;
+}
+
+.hidden {
+    display: none;
 }
 
 form {
@@ -61,6 +96,11 @@ button:hover {
     background: #1d4ed8;
 }
 
+.small {
+    font-size: 12px;
+    padding: 6px 8px;
+}
+
 .row {
     display: flex;
     flex-wrap: wrap;
@@ -81,6 +121,24 @@ button:hover {
     flex: 1;
 }
 
+.lobby-list,
+.player-list {
+    display: grid;
+    gap: 8px;
+}
+
+.lobby-item,
+.player-item {
+    border: 1px solid #dbe3ef;
+    border-radius: 6px;
+    padding: 8px;
+    background: #f9fbff;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+}
+
 .log {
     margin-top: 10px;
     background: #111827;
@@ -99,4 +157,28 @@ button:hover {
     background: #eef2ff;
     border-radius: 6px;
     padding: 8px;
+}
+
+.badge {
+    display: inline-block;
+    padding: 4px 10px;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 700;
+    margin-bottom: 8px;
+}
+
+.badge.connected {
+    background: #dcfce7;
+    color: #166534;
+}
+
+.badge.connecting {
+    background: #fef3c7;
+    color: #92400e;
+}
+
+.badge.offline {
+    background: #fee2e2;
+    color: #991b1b;
 }

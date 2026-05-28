@@ -3,74 +3,131 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Bunker MVP</title>
+    <title>Bunker MVP SPA</title>
     <link rel="stylesheet" href="/styles.css">
 </head>
 <body>
 <div class="container">
-    <h1>Bunker MVP</h1>
-    <p class="hint">Минимальный интерфейс для ручной проверки API и WebSocket.</p>
-
-    <section class="card">
-        <h2>1. Создать лобби</h2>
-        <form id="create-form">
-            <label for="create-name">Имя администратора</label>
-            <input id="create-name" type="text" maxlength="20" required>
-            <button type="submit">Создать</button>
-        </form>
-    </section>
-
-    <section class="card">
-        <h2>2. Войти в лобби</h2>
-        <form id="join-form">
-            <label for="join-lobby-id">Код лобби</label>
-            <input id="join-lobby-id" type="text" required>
-            <label for="join-name">Никнейм</label>
-            <input id="join-name" type="text" maxlength="20" required>
-            <button type="submit">Войти</button>
-        </form>
-    </section>
-
-    <section class="card">
-        <h2>3. Текущая сессия</h2>
-        <div id="session-info" class="mono">Нет активной сессии</div>
-        <div class="row">
-            <button id="connect-ws-btn" type="button">Подключить WebSocket</button>
-            <button id="disconnect-ws-btn" type="button">Отключить WebSocket</button>
-            <button id="load-chat-btn" type="button">Загрузить историю чата</button>
+    <header class="topbar">
+        <div>
+            <h1>Bunker MVP</h1>
+            <p class="hint">Наглядный vanilla JS интерфейс для HTTP + WebSocket сценариев.</p>
         </div>
-    </section>
-
-    <section class="card">
-        <h2>4. Действия в лобби</h2>
-        <div class="row">
-            <button id="ready-on-btn" type="button">Ready ON</button>
-            <button id="ready-off-btn" type="button">Ready OFF</button>
-            <button id="start-game-btn" type="button">Start Game</button>
-            <button id="shuffle-btn" type="button">Shuffle Cards</button>
+        <div class="status-box">
+            <div id="ws-badge" class="badge offline">WS: OFFLINE</div>
+            <div id="session-info" class="mono">Нет активной сессии</div>
         </div>
-        <div class="row">
-            <button id="status-open-btn" type="button">Status OPEN</button>
-            <button id="status-close-btn" type="button">Status CLOSE</button>
-        </div>
-        <form id="open-characteristic-form" class="inline-form">
-            <label for="characteristic-name">Характеристика</label>
-            <input id="characteristic-name" type="text" placeholder="profession">
-            <button type="submit">Открыть</button>
-        </form>
-    </section>
+    </header>
+
+    <nav class="tabs">
+        <button id="go-home-btn" type="button">Главная</button>
+        <button id="go-list-btn" type="button">Список лобби</button>
+        <button id="go-lobby-btn" type="button">Лобби</button>
+        <button id="go-game-btn" type="button">Игра</button>
+    </nav>
+
+    <main>
+        <section id="home-view" class="view">
+            <div class="card">
+                <h2>Создать лобби</h2>
+                <form id="create-form">
+                    <label for="create-name">Имя администратора</label>
+                    <input id="create-name" type="text" maxlength="20" required>
+                    <button type="submit">Создать и войти</button>
+                </form>
+            </div>
+            <div class="card">
+                <h2>Быстрый переход</h2>
+                <p class="hint">Открой список открытых комнат или перейди в комнату по коду.</p>
+                <div class="row">
+                    <button id="home-open-list-btn" type="button">Открыть список лобби</button>
+                </div>
+                <form id="home-join-form" class="inline-form">
+                    <input id="home-lobby-id" type="text" placeholder="Код лобби" required>
+                    <input id="home-nickname" type="text" maxlength="20" placeholder="Никнейм" required>
+                    <button type="submit">Войти по коду</button>
+                </form>
+            </div>
+        </section>
+
+        <section id="list-view" class="view hidden">
+            <div class="card">
+                <div class="card-head">
+                    <h2>Список лобби</h2>
+                    <button id="refresh-lobbies-btn" type="button">Обновить</button>
+                </div>
+                <div id="lobbies-list" class="lobby-list"></div>
+            </div>
+            <div class="card">
+                <h2>Войти в лобби</h2>
+                <form id="join-form">
+                    <label for="join-lobby-id">Код лобби</label>
+                    <input id="join-lobby-id" type="text" required>
+                    <label for="join-name">Никнейм</label>
+                    <input id="join-name" type="text" maxlength="20" required>
+                    <button type="submit">Войти</button>
+                </form>
+            </div>
+        </section>
+
+        <section id="lobby-view" class="view hidden">
+            <div class="card">
+                <div class="card-head">
+                    <h2>Лобби</h2>
+                    <div class="row">
+                        <button id="connect-ws-btn" type="button">Подключить WS</button>
+                        <button id="disconnect-ws-btn" type="button">Отключить WS</button>
+                        <button id="leave-lobby-btn" type="button">Покинуть лобби</button>
+                    </div>
+                </div>
+                <div id="lobby-meta" class="mono">Лобби не выбрано</div>
+                <div class="row">
+                    <button id="ready-on-btn" type="button">Ready ON</button>
+                    <button id="ready-off-btn" type="button">Ready OFF</button>
+                    <button id="status-open-btn" type="button">Status OPEN</button>
+                    <button id="status-close-btn" type="button">Status CLOSE</button>
+                    <button id="start-game-btn" type="button">Start game</button>
+                </div>
+            </div>
+
+            <div class="card">
+                <h2>Участники</h2>
+                <div id="players-list" class="player-list"></div>
+            </div>
+
+            <div class="card">
+                <div class="card-head">
+                    <h2>Чат лобби</h2>
+                    <button id="load-chat-btn" type="button">История</button>
+                </div>
+                <form id="chat-form" class="inline-form">
+                    <input id="chat-input" type="text" maxlength="500" placeholder="Сообщение..." required>
+                    <button type="submit">Отправить</button>
+                </form>
+                <div id="chat-log" class="log"></div>
+            </div>
+        </section>
+
+        <section id="game-view" class="view hidden">
+            <div class="card">
+                <h2>Игра</h2>
+                <div class="row">
+                    <form id="open-characteristic-form" class="inline-form">
+                        <input id="characteristic-name" type="text" placeholder="profession" required>
+                        <button type="submit">Открыть характеристику</button>
+                    </form>
+                    <button id="shuffle-btn" type="button">Shuffle cards (admin)</button>
+                </div>
+            </div>
+            <div class="card">
+                <h2>Игровые события</h2>
+                <div id="game-log" class="log"></div>
+            </div>
+        </section>
+    </main>
 
     <section class="card">
-        <h2>5. Чат</h2>
-        <form id="chat-form" class="inline-form">
-            <input id="chat-input" type="text" maxlength="500" placeholder="Сообщение..." required>
-            <button type="submit">Отправить</button>
-        </form>
-        <div id="chat-log" class="log"></div>
-    </section>
-
-    <section class="card">
-        <h2>События</h2>
+        <h2>Системные события</h2>
         <div id="event-log" class="log"></div>
     </section>
 </div>
