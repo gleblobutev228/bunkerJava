@@ -34,6 +34,10 @@
         gameAdminActions: document.getElementById("game-admin-actions")
     };
 
+    const cardTooltip = document.createElement("div");
+    cardTooltip.className = "floating-tooltip hidden";
+    document.body.appendChild(cardTooltip);
+
     const characteristicOrder = [
         "profession",
         "bio",
@@ -173,6 +177,15 @@
         return normalized;
     }
 
+    function escapeHtml(value) {
+        return String(value ?? "")
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;")
+            .replace(/'/g, "&#39;");
+    }
+
     function mergeSelfCharacteristics(rawCharacteristics) {
         const normalized = normalizeCharacteristics(rawCharacteristics);
         characteristicOrder.forEach((name) => {
@@ -202,21 +215,46 @@
         dom.cardsTableBody.innerHTML = characteristicOrder
             .map((name) => {
                 const card = state.selfCharacteristics[name] || { value: "", visible: false, description: "" };
-                const visibleText = card.visible ? (card.value || "—") : "Скрыто";
+                const visibleText = card.value || "—";
                 const actionLabel = card.visible ? "Открыта" : "Открыть";
-                const tooltip = card.description
-                    ? card.description.replace(/"/g, "&quot;")
-                    : "Описание отсутствует";
+                const tooltip = card.description || "Описание отсутствует";
                 const disabled = card.visible || !canOpenCharacteristics();
                 return (
                     "<tr>" +
-                    `<td>${name}</td>` +
-                    `<td><span class="card-value-tip" title="${tooltip}">${visibleText}</span></td>` +
-                    `<td><button type="button" class="small open-card-btn" data-card-name="${name}" ${disabled ? "disabled" : ""}>${actionLabel}</button></td>` +
+                    `<td>${escapeHtml(name)}</td>` +
+                    `<td><span class="card-value-tip" tabindex="0" title="${escapeHtml(tooltip)}" data-description="${escapeHtml(tooltip)}">${escapeHtml(visibleText)}</span></td>` +
+                    `<td><button type="button" class="small open-card-btn" data-card-name="${escapeHtml(name)}" ${disabled ? "disabled" : ""}>${escapeHtml(actionLabel)}</button></td>` +
                     "</tr>"
                 );
             })
             .join("");
+    }
+
+    function positionCardTooltip(clientX, clientY) {
+        const padding = 12;
+        const offset = 14;
+        const maxLeft = window.innerWidth - cardTooltip.offsetWidth - padding;
+        const maxTop = window.innerHeight - cardTooltip.offsetHeight - padding;
+        const left = Math.max(padding, Math.min(clientX + offset, maxLeft));
+        const top = Math.max(padding, Math.min(clientY + offset, maxTop));
+        cardTooltip.style.left = `${left}px`;
+        cardTooltip.style.top = `${top}px`;
+    }
+
+    function showCardTooltip(target, event) {
+        const description = target.dataset.description || "Описание отсутствует";
+        cardTooltip.textContent = description;
+        cardTooltip.classList.remove("hidden");
+        if (event) {
+            positionCardTooltip(event.clientX, event.clientY);
+            return;
+        }
+        const rect = target.getBoundingClientRect();
+        positionCardTooltip(rect.left, rect.bottom);
+    }
+
+    function hideCardTooltip() {
+        cardTooltip.classList.add("hidden");
     }
 
     function updateReadyToggleUi() {
@@ -800,6 +838,38 @@
             logEvent(`Ошибка открытия характеристики: ${error.message}`);
         }
     });
+
+    dom.cardsTableBody.addEventListener("mouseover", (event) => {
+        const tipTarget = event.target.closest(".card-value-tip");
+        if (!tipTarget || !dom.cardsTableBody.contains(tipTarget)) {
+            return;
+        }
+        showCardTooltip(tipTarget, event);
+    });
+
+    dom.cardsTableBody.addEventListener("mousemove", (event) => {
+        if (!event.target.closest(".card-value-tip") || cardTooltip.classList.contains("hidden")) {
+            return;
+        }
+        positionCardTooltip(event.clientX, event.clientY);
+    });
+
+    dom.cardsTableBody.addEventListener("mouseout", (event) => {
+        const tipTarget = event.target.closest(".card-value-tip");
+        if (!tipTarget || tipTarget.contains(event.relatedTarget)) {
+            return;
+        }
+        hideCardTooltip();
+    });
+
+    dom.cardsTableBody.addEventListener("focusin", (event) => {
+        const tipTarget = event.target.closest(".card-value-tip");
+        if (tipTarget) {
+            showCardTooltip(tipTarget);
+        }
+    });
+
+    dom.cardsTableBody.addEventListener("focusout", hideCardTooltip);
 
     dom.shuffleBtn.addEventListener("click", () => {
         try {

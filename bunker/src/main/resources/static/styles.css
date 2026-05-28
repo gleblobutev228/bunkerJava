@@ -239,6 +239,20 @@ button:disabled {
 }
 
 .card-value-tip {
+    position: relative;
     border-bottom: 1px dashed #6b7280;
     cursor: help;
+}
+
+.floating-tooltip {
+    position: fixed;
+    z-index: 1000;
+    max-width: 320px;
+    padding: 8px 10px;
+    border-radius: 6px;
+    background: #111827;
+    color: #f9fafb;
+    box-shadow: 0 8px 18px rgba(17, 24, 39, 0.18);
+    font-size: 13px;
+    pointer-events: none;
 }
