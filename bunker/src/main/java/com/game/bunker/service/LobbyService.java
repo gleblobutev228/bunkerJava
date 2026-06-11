@@ -61,6 +61,7 @@ public class LobbyService {
      * - Откуда (Inbound): LobbySessionService join или create lobby flow.
      * - Куда (Outbound): UserService, UserRepository, LobbyRepository, Redis TTL.
      */
+    // TODO(senior): Гонка join/admin assignment: создание игрока, добавление в set и назначение админа не атомарны; перенести правило в Redis transaction/Lua.
     public User addUser(String lobbyId, String nickname) {
         Lobby lobby = lobbyRepository.findById(lobbyId)
                 .orElseThrow(() -> new NoSuchElementException("Lobby not found: " + lobbyId));
@@ -84,6 +85,7 @@ public class LobbyService {
      * - Откуда (Inbound): внутренние сценарии или тесты, где User уже собран.
      * - Куда (Outbound): UserRepository, LobbyRepository, Redis.
      */
+    // TODO(senior): Дублирует сценарий addUser(String, String), из-за чего бизнес-правила могут разойтись; выделить единый путь изменения агрегата.
     public User addUser(String lobbyId, User user) {
         Lobby lobby = lobbyRepository.findById(lobbyId)
                 .orElseThrow(() -> new NoSuchElementException("Lobby not found: " + lobbyId));
@@ -141,6 +143,7 @@ public class LobbyService {
      * - Откуда (Inbound): GameWebSocketService после изменения ready.
      * - Куда (Outbound): LobbyRepository, UserRepository, Redis.
      */
+    // TODO(senior): Потенциальный N+1 к Redis через findVisibleByIds; для роста лобби нужен batch/pipeline на уровне репозитория.
     public List<User> getVisibleLobbyUsers(String lobbyId) {
         Lobby lobby = lobbyRepository.findById(lobbyId)
                 .orElseThrow(() -> new NoSuchElementException("Lobby not found: " + lobbyId));
@@ -160,6 +163,7 @@ public class LobbyService {
      * - Откуда (Inbound): GameWebSocketService admin status command.
      * - Куда (Outbound): LobbyRepository, Redis lobby hash.
      */
+    // TODO(senior): Проверка прав и изменение статуса разделены по Redis-вызовам; при конкуренции состояние может измениться между ними.
     public Lobby updateStatus(String lobbyId, LobbyStatus status, String userId) {
         Lobby lobby = requireAdmin(lobbyId, userId);
         lobby.setStatus(status);
@@ -179,6 +183,7 @@ public class LobbyService {
      * - Откуда (Inbound): LobbySessionService или GameWebSocketService start command.
      * - Куда (Outbound): LobbyRepository, Redis status hash и expire для лобби/игроков.
      */
+    // TODO(senior): Переход в игру и продление TTL выполняются несколькими Redis-командами; сделать startGame атомарным и идемпотентным.
     public Lobby startGame(String lobbyId, String userId) {
         Lobby lobby = requireAdmin(lobbyId, userId);
         lobby.setStatus(LobbyStatus.GAME);
@@ -241,10 +246,12 @@ public class LobbyService {
         return lobby;
     }
 
+    // TODO(senior): Метод пробрасывает репозиторий без доменной валидации/лимитов; при росте чата правила хранения лучше держать в домене или отдельном ChatService.
     public void addChatMessage(String lobbyId, LobbyChatMessage message) {
         lobbyRepository.addChatMessage(lobbyId, message);
     }
 
+    // TODO(senior): История чата читается синхронно из Redis на HTTP path; при активных лобби нужен кэш/пагинация/лимиты на уровне API.
     public List<LobbyChatMessage> getChatHistory(String lobbyId) {
         return lobbyRepository.getChatHistory(lobbyId);
     }
@@ -277,6 +284,7 @@ public class LobbyService {
      * - Откуда (Inbound): LobbySessionService leave flow.
      * - Куда (Outbound): UserService, UserRepository, LobbyRepository, Redis delete/remove.
      */
+    // TODO(senior): Выход админа удаляет пользователей и лобби несколькими вызовами; частичный сбой оставит сиротское состояние, нужна транзакция/Lua.
     public LeaveLobbyResult leaveLobby(String lobbyId, String userId) {
         Lobby lobby = getLobby(lobbyId);
         if (!lobby.getUserIds().contains(userId)) {
@@ -299,6 +307,7 @@ public class LobbyService {
         return new LeaveLobbyResult(false, List.of(userId));
     }
 
+    // TODO(senior): Проверка уникальности кода через findById не атомарна; при параллельном создании лучше резервировать код SETNX.
     private String generateUniqueLobbyId() {
         for (int attempt = 0; attempt < 20; attempt++) {
             String lobbyId = LobbyCodeGenerator.generate();

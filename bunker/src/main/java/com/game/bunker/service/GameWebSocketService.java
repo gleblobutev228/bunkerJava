@@ -52,6 +52,7 @@ public class GameWebSocketService {
      * - Откуда (Inbound): GameWebSocketController /app/lobby/{lobbyId}/chat.
      * - Куда (Outbound): UserService, SimpMessagingTemplate, /topic/lobby/{lobbyId}.
      */
+    // TODO(senior): Запись истории чата и публикация события разделены; при сбое publish сообщение сохранится, но клиенты его не увидят.
     public void sendChatMessage(String lobbyId, LobbyChatRequest request, Principal principal) {
         User sender = currentUser(principal);
         LobbyChatMessage message = new LobbyChatMessage(
@@ -85,6 +86,7 @@ public class GameWebSocketService {
      * - Откуда (Inbound): GameWebSocketController /app/lobby/{lobbyId}/ready.
      * - Куда (Outbound): UserService, Redis user hash, /topic/lobby/{lobbyId}.
      */
+    // TODO(senior): setReady и publishLobbyState не атомарны; при ошибке рассылки состояние изменится без уведомления клиентов.
     public void updateReadyState(String lobbyId, LobbyReadyRequest request, Principal principal) {
         User sender = currentUser(principal);
         userService.setReady(sender.getId(), request.ready());
@@ -103,6 +105,7 @@ public class GameWebSocketService {
      * - Откуда (Inbound): GameWebSocketController /app/lobby/{lobbyId}/status.
      * - Куда (Outbound): LobbyService, Redis lobby hash, /topic/lobby/{lobbyId}.
      */
+    // TODO(senior): Изменение статуса и публикация события не оформлены как outbox/transactional messaging; возможна рассинхронизация UI.
     public void updateLobbyStatus(String lobbyId, LobbyStatusRequest request, Principal principal) {
         String adminId = requireUserId(principal);
         Lobby lobby = lobbyService.updateStatus(lobbyId, parseLobbyStatus(request.status()), adminId);
@@ -125,6 +128,7 @@ public class GameWebSocketService {
      * - Откуда (Inbound): GameWebSocketController /app/lobby/{lobbyId}/start.
      * - Куда (Outbound): LobbyService, Redis status/TTL, /topic/game/{lobbyId}.
      */
+    // TODO(senior): После startGame состояние уже GAME, но publish может упасть; нужен outbox/retry worker или идемпотентный recovery для клиентов.
     public void startGame(String lobbyId, Principal principal) {
         String adminId = requireUserId(principal);
         Lobby lobby = lobbyService.startGame(lobbyId, adminId);
@@ -148,6 +152,7 @@ public class GameWebSocketService {
      * - Откуда (Inbound): GameWebSocketController /app/game/{lobbyId}/open-characteristic.
      * - Куда (Outbound): UserService, Redis user hash, /topic/game/{lobbyId}.
      */
+    // TODO(senior): Открытие характеристики не проверяет принадлежность actor к lobbyId внутри домена; сейчас это доверено внешнему @PreAuthorize.
     public void openCharacteristic(String lobbyId, OpenCharacteristicRequest request, Principal principal) {
         User actor = currentUser(principal);
         userService.openCharacteristic(actor.getId(), request.characteristicName());
@@ -175,6 +180,7 @@ public class GameWebSocketService {
      * - Откуда (Inbound): GameWebSocketController /app/game/{lobbyId}/shuffle-cards.
      * - Куда (Outbound): LobbyService, Redis lobby hash, /topic/game/{lobbyId}.
      */
+    // TODO(senior): Доменное действие и событие разнесены; при ошибке publish версия shuffle изменится, а клиенты не получат команду.
     public void shuffleCards(String lobbyId, Principal principal) {
         String adminId = requireUserId(principal);
         long version = lobbyService.shuffleCards(lobbyId, adminId);
@@ -190,6 +196,7 @@ public class GameWebSocketService {
         return userService.getUser(requireUserId(principal));
     }
 
+    // TODO(senior): Сервис бизнес-логики зависит от java.security.Principal; лучше передавать userId из контроллера, чтобы не смешивать transport и domain.
     private String requireUserId(Principal principal) {
         if (principal == null || principal.getName() == null || principal.getName().isBlank()) {
             throw new IllegalArgumentException("WebSocket user is not authenticated");
@@ -197,6 +204,7 @@ public class GameWebSocketService {
         return principal.getName();
     }
 
+    // TODO(senior): valueOf на внешнем вводе бросит IllegalArgumentException без нормального error contract; вынести в валидируемый enum DTO.
     private LobbyStatus parseLobbyStatus(String rawStatus) {
         if (rawStatus == null || rawStatus.isBlank()) {
             throw new IllegalArgumentException("Lobby status is required");

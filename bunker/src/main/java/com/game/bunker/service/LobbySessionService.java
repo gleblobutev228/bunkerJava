@@ -49,6 +49,7 @@ public class LobbySessionService {
      * - Откуда (Inbound): HttpLobbyController POST /create.
      * - Куда (Outbound): LobbyService, Redis, JwtProvider, HTTP Set-Cookie.
      */
+    // TODO(senior): Сервис возвращает ResponseEntity и знает про redirect/headers; это смешивает web layer и доменную orchestration, лучше вернуть DTO результата.
     public ResponseEntity<Void> createLobbyRedirect(UserCreationRequest request) {
         AuthResponse response = createLobbySession(request.userName());
         return ResponseEntity.status(HttpStatus.FOUND)
@@ -68,6 +69,7 @@ public class LobbySessionService {
      * - Откуда (Inbound): HttpLobbyController POST /api/v1/lobbies.
      * - Куда (Outbound): LobbyService, Redis, JwtProvider.
      */
+    // TODO(senior): Нарушение SRP/слоев: session service формирует HTTP-ответ; сборку ResponseEntity лучше оставить контроллеру.
     public ResponseEntity<AuthResponse> createLobby(UserCreationRequest request) {
         return withJwtCookie(createLobbySession(request.userName()));
     }
@@ -85,6 +87,7 @@ public class LobbySessionService {
      * - Откуда (Inbound): HttpLobbyController POST /api/v1/lobbies/{lobbyId}/join.
      * - Куда (Outbound): JwtProvider, LobbyService, UserService, Redis.
      */
+    // TODO(senior): Join/reconnect зависит от HTTP request и возвращает ResponseEntity; вынести cookie/http детали из сервиса для соблюдения IoC/SRP.
     public ResponseEntity<AuthResponse> joinLobby(String lobbyId, AuthLoginRequest request, HttpServletRequest httpRequest) {
         String userIdFromToken = resolveValidUserId(httpRequest);
         AuthResponse response = joinOrReconnect(lobbyId, request.nickname(), userIdFromToken);
@@ -123,6 +126,7 @@ public class LobbySessionService {
      * - Откуда (Inbound): HttpLobbyController POST /api/v1/lobbies/{lobbyId}/leave.
      * - Куда (Outbound): LobbyService, Redis, STOMP /user/queue/reply при выходе админа.
      */
+    // TODO(senior): Метод совмещает доменный leave, WebSocket-уведомления и HTTP-cookie cleanup; разделить orchestration и transport concerns.
     public ResponseEntity<Void> leaveLobby(String lobbyId, Authentication authentication) {
         String userId = currentUserId(authentication);
         LobbyService.LeaveLobbyResult result = lobbyService.leaveLobby(lobbyId, userId);
@@ -139,6 +143,7 @@ public class LobbySessionService {
         return new AuthResponse(admin, lobbyService.getLobby(lobby.getId()));
     }
 
+    // TODO(senior): Между getLobby/exists/addUser возможна гонка с удалением лобби или выходом админа; нужен единый атомарный join/reconnect сценарий.
     private AuthResponse joinOrReconnect(String lobbyId, String nickname, String userIdFromToken) {
         var lobby = lobbyService.getLobby(lobbyId);
         if (userIdFromToken != null && lobby.getUserIds().contains(userIdFromToken) && userService.exists(userIdFromToken)) {
@@ -159,12 +164,14 @@ public class LobbySessionService {
      * - Откуда (Inbound): HttpLobbyController /api/v1/auth/clear-cookie или leaveLobby.
      * - Куда (Outbound): HTTP Set-Cookie header.
      */
+    // TODO(senior): HTTP-cookie response в сервисе закрепляет зависимость от Spring MVC; лучше вернуть команду очистки cookie контроллеру.
     public ResponseEntity<Void> clearJwtCookie() {
         return ResponseEntity.noContent()
                 .header(HttpHeaders.SET_COOKIE, expiredJwtCookie().toString())
                 .build();
     }
 
+    // TODO(senior): Уведомление игроков идет последовательными critical publish; при большом лобби это блокирует leave flow, нужна async fan-out стратегия.
     private void notifyPlayersToClearJwt(String lobbyId, LobbyService.LeaveLobbyResult result) {
         for (String playerId : result.affectedUserIds()) {
             // STOMP user destination доставляет команду конкретному подключенному игроку.
@@ -183,6 +190,7 @@ public class LobbySessionService {
                 .body(response);
     }
 
+    // TODO(senior): secure(false) захардкожен; флаг cookie должен приходить из конфигурации окружения, иначе production легко оставить без Secure.
     private ResponseCookie createJwtCookie(User user) {
         // ResponseCookie формирует Set-Cookie с HttpOnly JWT для браузера.
         return ResponseCookie.from(JwtFilter.JWT_COOKIE_NAME, jwtProvider.generateToken(user.getId()))

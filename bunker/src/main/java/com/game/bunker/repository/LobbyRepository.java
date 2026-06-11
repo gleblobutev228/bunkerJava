@@ -93,6 +93,7 @@ public class LobbyRepository {
      * - Откуда (Inbound): LobbyService, LobbySecurity.
      * - Куда (Outbound): Redis hash lobby:{id}, Redis set lobby:{id}:users.
      */
+    // TODO(senior): Метод делает несколько отдельных Redis-запросов; для горячего path лучше читать hash/set через pipeline или объединенный Lua.
     public Optional<Lobby> findById(String lobbyId) {
         // Hash lobby:{id} является признаком существования лобби.
         String status = (String) redisTemplate.opsForHash().get(lobbyKey(lobbyId), "status");
@@ -124,6 +125,7 @@ public class LobbyRepository {
      * - Откуда (Inbound): LobbyService.getLobbiesByStatus.
      * - Куда (Outbound): Redis keys lobby:* и findById для каждого hash.
      */
+    // TODO(senior): KEYS + findById на каждое лобби станет бутылочным горлышком Redis; нужен индекс по статусу или SCAN/pipeline.
     public List<Lobby> findAllByStatus(LobbyStatus status) {
         // Redis keys используется для небольшого учебного проекта; в production лучше индексировать лобби по статусу.
         Set<String> keys = redisTemplate.keys("lobby:*");
@@ -150,6 +152,7 @@ public class LobbyRepository {
      * - Откуда (Inbound): LobbyService.addUser.
      * - Куда (Outbound): Redis set lobby:{id}:users и expire.
      */
+    // TODO(senior): SADD и выставление TTL выполняются отдельно; при сбое возможен ключ участников без корректного времени жизни.
     public void addUser(String lobbyId, String userId) {
         // Redis Set хранит только идентификаторы участников, сами пользователи лежат в user:{id}.
         redisTemplate.opsForSet().add(lobbyUsersKey(lobbyId), userId);
@@ -238,6 +241,7 @@ public class LobbyRepository {
      * - Откуда (Inbound): LobbyService.startGame.
      * - Куда (Outbound): Redis expire для lobby:{id}, lobby:{id}:users и user:{id}.
      */
+    // TODO(senior): members() загружает всех игроков в память; для больших лобби использовать SCAN или Lua/pipeline без полной материализации.
     public void extendGameTtl(String lobbyId) {
         expireLobbyKeys(lobbyId, SESSION_TTL);
         Set<String> userIds = redisTemplate.opsForSet().members(lobbyUsersKey(lobbyId));
@@ -276,6 +280,7 @@ public class LobbyRepository {
         return Optional.of(Duration.ofSeconds(seconds));
     }
 
+    // TODO(senior): Запись, trim и expire истории чата не атомарны; при сбое возможна рассинхронизация списка и TTL.
     public void addChatMessage(String lobbyId, LobbyChatMessage message) {
         try {
             String chatKey = lobbyChatKey(lobbyId);
@@ -288,6 +293,7 @@ public class LobbyRepository {
         }
     }
 
+    // TODO(senior): JSON-десериализация каждого сообщения на пути HTTP-запроса может стать точкой задержек; рассмотреть пакетную обработку/кэш или отдельное DTO-хранилище.
     public List<LobbyChatMessage> getChatHistory(String lobbyId) {
         List<LobbyChatMessage> result = new ArrayList<>();
         try {

@@ -50,30 +50,13 @@ public class UserRepository {
      * - Откуда (Inbound): UserService.saveUser, LobbyService.addUser.
      * - Куда (Outbound): Redis hash user:{id} и expire.
      */
+    // TODO(senior): save и expire не атомарны; при сбое между командами пользователь может остаться без TTL.
     public User saveWithTtl(User user, Duration ttl) {
         save(user);
         redisTemplate.expire(userKey(user.getId()), ttl);
         return user;
     }
 
-    /**
-     * Сохраняет заранее собранный Redis hash пользователя и выставляет TTL.
-     *
-     * @param userId идентификатор пользователя.
-     * @param hash плоское представление пользователя.
-     * @param ttl время жизни Redis-ключа.
-     * @return восстановленная доменная модель пользователя.
-     *
-     * Call Chain:
-     * - Откуда (Inbound): UserService.generateAndSaveUser.
-     * - Куда (Outbound): Redis hash user:{id} и expire.
-     */
-    public User saveHashWithTtl(String userId, Map<String, String> hash, Duration ttl) {
-        // Hash записывается напрямую, чтобы не собирать промежуточный User для сгенерированных характеристик.
-        redisTemplate.opsForHash().putAll(userKey(userId), hash);
-        redisTemplate.expire(userKey(userId), ttl);
-        return fromHash(userId, toObjectMap(hash), false);
-    }
 
     /**
      * Загружает полное состояние пользователя.
@@ -113,6 +96,7 @@ public class UserRepository {
      * - Откуда (Inbound): LobbyService.getVisibleLobbyUsers.
      * - Куда (Outbound): Redis hash user:{id} для каждого участника.
      */
+    // TODO(senior): N+1 чтение Redis hash растет вместе с числом игроков; заменить на pipeline/batch-метод репозитория.
     public List<User> findVisibleByIds(Iterable<String> userIds) {
         return toStream(userIds)
                 .map(this::findVisibleById)
@@ -158,6 +142,7 @@ public class UserRepository {
      * - Откуда (Inbound): UserService.openCharacteristic.
      * - Куда (Outbound): Redis hash user:{id}.
      */
+    // TODO(senior): Метод не проверяет существование пользователя и состояние игры; инвариант открытия характеристики лучше держать ближе к доменной операции.
     public void openCharacteristic(String userId, String charName) {
         redisTemplate.opsForHash().put(userKey(userId), charName + ":visible", "1");
     }

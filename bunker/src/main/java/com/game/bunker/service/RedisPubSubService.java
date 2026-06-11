@@ -72,6 +72,7 @@ public class RedisPubSubService implements MessageListener {
         publishCriticalWithRetry(RedisWsDeliveryType.USER, destination, userId, eventType, payload);
     }
 
+    // TODO(senior): Блокирующий retry через Thread.sleep держит поток вызывающего сервиса; вынести в RetryTemplate/очередь с backoff.
     private void publishCriticalWithRetry(RedisWsDeliveryType deliveryType,
                                           String destination,
                                           String userId,
@@ -128,6 +129,7 @@ public class RedisPubSubService implements MessageListener {
         );
     }
 
+    // TODO(senior): Нарушение масштабируемости: sleep в сервисе блокирует рабочий поток, лучше использовать неблокирующий retry или scheduler.
     private void sleepBeforeRetry(int attempt) {
         try {
             Thread.sleep(RETRY_DELAYS_MS[Math.max(0, attempt - 1)]);
@@ -137,6 +139,7 @@ public class RedisPubSubService implements MessageListener {
         }
     }
 
+    // TODO(senior): Redis Pub/Sub без подтверждений, дедупликации и очереди ошибок опасен для критичных игровых событий; добавить идемпотентность или надежный брокер.
     @Override
     public void onMessage(Message message, byte[] pattern) {
         try {
@@ -169,6 +172,7 @@ public class RedisPubSubService implements MessageListener {
         }
     }
 
+    // TODO(senior): Нарушение OCP: при добавлении нового события нужно менять switch; вынести маппинг типов payload в реестр/стратегии.
     private Object deserializePayload(RedisWsEventType eventType, String payloadJson) throws Exception {
         return switch (eventType) {
             case LOBBY_CHAT -> objectMapper.readValue(payloadJson, LobbyChatMessage.class);

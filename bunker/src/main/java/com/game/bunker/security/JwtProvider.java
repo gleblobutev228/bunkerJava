@@ -19,6 +19,7 @@ public class JwtProvider {
 
     private final SecretKey secretKey;
 
+    // TODO(senior): Дефолтный secret в коде опасен для production; требовать внешний секрет и fail-fast при placeholder-значении.
     public JwtProvider(@Value("${jwt.secret:bunker-jwt-secret-key-for-local-development-change-me-please}") String secret) {
         this.secretKey = Keys.hmacShaKeyFor(secret.getBytes(StandardCharsets.UTF_8));
     }

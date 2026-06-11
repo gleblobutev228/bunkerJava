@@ -47,6 +47,7 @@ public class HttpLobbyController {
 
     @GetMapping("/api/v1/lobbies")
     @ResponseBody
+    // TODO(senior): Парсинг enum в контроллере без обработки ошибки даст 500/общий exception; вынести в DTO/validator и вернуть корректный 400.
     public ResponseEntity<List<LobbyListItemResponse>> getLobbiesByStatus(
             @RequestParam(defaultValue = "OPEN") String status) {
         LobbyStatus lobbyStatus = LobbyStatus.valueOf(status.trim().toUpperCase());

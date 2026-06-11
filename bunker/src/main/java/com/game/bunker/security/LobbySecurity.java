@@ -21,11 +21,13 @@ public class LobbySecurity {
         return userId != null && lobbyService.isAdmin(lobbyId, userId);
     }
 
+    // TODO(senior): В связке с isMember/isAdmin в @PreAuthorize один запрос может читать лобби несколько раз; объединить проверки или кэшировать контекст.
     public boolean isLobbyStage(String lobbyId) {
         Lobby lobby = lobbyService.getLobby(lobbyId);
         return lobby.getStatus() == LobbyStatus.OPEN || lobby.getStatus() == LobbyStatus.CLOSE;
     }
 
+    // TODO(senior): Проверка стадии каждый раз ходит в Redis через LobbyService; на горячих WebSocket-командах нужен единый authorization snapshot.
     public boolean isGameStage(String lobbyId) {
         return lobbyService.getLobby(lobbyId).getStatus() == LobbyStatus.GAME;
     }

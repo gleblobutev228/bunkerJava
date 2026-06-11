@@ -1,6 +1,7 @@
 package com.game.bunker.repository.catalog;
 
 import com.game.bunker.entity.catalog.ExperienceCatalog;
+import io.lettuce.core.dynamic.annotation.Param;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.stereotype.Repository;
@@ -22,6 +23,6 @@ public interface ExperienceCatalogRepository extends JpaRepository<ExperienceCat
      * - Откуда (Inbound): UserService.generateBioAndValidExperience.
      * - Куда (Outbound): Spring Data JPA native query, таблица experience_catalog.
      */
-    @Query(value = "select * from experience_catalog order by random() limit 1", nativeQuery = true)
-    Optional<ExperienceCatalog> findRandom();
+    @Query(value = "select * from experience_catalog where min_age >= :minAge order by random() limit 1", nativeQuery = true)
+    Optional<ExperienceCatalog> findRandom(@Param("minAge") int minAge);
 }

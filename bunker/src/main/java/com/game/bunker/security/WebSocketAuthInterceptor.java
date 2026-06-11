@@ -26,6 +26,7 @@ public class WebSocketAuthInterceptor implements ChannelInterceptor {
     }
 
     @Override
+    // TODO(senior): CONNECT делает синхронную проверку Redis через userService.exists; при всплеске подключений это станет бутылочным горлышком, нужен кэш/батчинг/лимиты.
     public Message<?> preSend(Message<?> message, MessageChannel channel) {
         StompHeaderAccessor accessor = MessageHeaderAccessor.getAccessor(message, StompHeaderAccessor.class);
         if (accessor == null || accessor.getCommand() != StompCommand.CONNECT) {

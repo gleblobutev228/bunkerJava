@@ -1,5 +1,6 @@
 package com.game.bunker.entity.catalog;
 
+import com.game.bunker.utils.generator.YearWordGetter;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
@@ -15,7 +16,11 @@ public class ExperienceCatalog {
     private Long id;
 
     @Column(nullable = false)
-    private String value;
+    private int experience;
+
+    @Column(nullable = false)
+    private String grade;
+
 
     public Long getId() {
         return id;
@@ -25,11 +30,27 @@ public class ExperienceCatalog {
         this.id = id;
     }
 
-    public String getValue() {
-        return value;
+    public int getExperience() {
+        return experience;
     }
 
-    public void setValue(String value) {
-        this.value = value;
+    public void setExperience(int experience) {
+        this.experience = experience;
+    }
+
+    public String getGrade() {
+        return grade;
+    }
+
+    public void setGrade(String grade) {
+        this.grade = grade;
+    }
+
+
+    @Override
+    public String toString() {
+        return "%d %s опыта. %s".formatted(experience, YearWordGetter.getYearWord(experience), grade);
     }
 }
+
+
