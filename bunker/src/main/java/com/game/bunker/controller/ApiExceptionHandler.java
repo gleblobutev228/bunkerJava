@@ -1,6 +1,6 @@
 package com.game.bunker.controller;
 
-import com.game.bunker.service.WsPublishFailedException;
+import com.game.bunker.infrastructure.messaging.WsPublishFailedException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.AccessDeniedException;

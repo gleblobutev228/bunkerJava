@@ -1,10 +1,10 @@
 package com.game.bunker.controller;
 
-import com.game.bunker.dto.ws.LobbyChatRequest;
-import com.game.bunker.dto.ws.LobbyReadyRequest;
-import com.game.bunker.dto.ws.LobbyStatusRequest;
-import com.game.bunker.dto.ws.OpenCharacteristicRequest;
-import com.game.bunker.service.GameWebSocketService;
+import com.game.bunker.transport.ws.LobbyChatRequest;
+import com.game.bunker.transport.ws.LobbyReadyRequest;
+import com.game.bunker.transport.ws.LobbyStatusRequest;
+import com.game.bunker.transport.ws.OpenCharacteristicRequest;
+import com.game.bunker.application.websocket.GameWebSocketService;
 import org.springframework.messaging.handler.annotation.DestinationVariable;
 import org.springframework.messaging.handler.annotation.MessageMapping;
 import org.springframework.security.access.prepost.PreAuthorize;

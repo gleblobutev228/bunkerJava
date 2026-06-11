@@ -1,14 +1,14 @@
 package com.game.bunker.controller;
 
 
-import com.game.bunker.dto.AuthLoginRequest;
-import com.game.bunker.dto.AuthResponse;
-import com.game.bunker.dto.LobbyListItemResponse;
-import com.game.bunker.dto.UserCreationRequest;
-import com.game.bunker.dto.ws.LobbyChatMessage;
-import com.game.bunker.entity.LobbyStatus;
-import com.game.bunker.service.LobbyService;
-import com.game.bunker.service.LobbySessionService;
+import com.game.bunker.user.dto.AuthLoginRequest;
+import com.game.bunker.user.dto.AuthResponse;
+import com.game.bunker.lobby.dto.LobbyListItemResponse;
+import com.game.bunker.user.dto.UserCreationRequest;
+import com.game.bunker.transport.ws.LobbyChatMessage;
+import com.game.bunker.lobby.entity.LobbyStatus;
+import com.game.bunker.lobby.service.LobbyService;
+import com.game.bunker.application.lobby.LobbySessionService;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
