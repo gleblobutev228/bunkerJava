@@ -1,7 +1,8 @@
 package com.game.bunker.user.repository;
 
+import com.game.bunker.characteristic.entity.Survivor;
 import com.game.bunker.user.entity.User;
-import com.game.bunker.characteristic.entity.UserCharacteristic;
+import com.game.bunker.characteristic.entity.SurvivorCharacteristic;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Repository;
 
@@ -175,14 +176,15 @@ public class UserRepository {
         hash.put("ready", Boolean.toString(user.isReady()));
         hash.put("lobby_id", nullToEmpty(user.getLobbyId()));
 
-        for (String name : User.CHARACTERISTIC_NAMES) {
-            UserCharacteristic characteristic = user.getCharacteristics() == null ? null : user.getCharacteristics().get(name);
+        for (String name : Survivor.CHARACTERISTIC_NAMES) {
+            SurvivorCharacteristic characteristic = user.getCharacteristics() == null ? null : user.getCharacteristics().get(name);
             hash.put(name, characteristic == null ? "" : nullToEmpty(characteristic.getValue()));
             hash.put(name + ":visible", characteristic != null && characteristic.isVisible() ? "1" : "0");
             if (!"bio".equals(name) && characteristic != null && characteristic.getDescription() != null) {
                 hash.put(name + ":description", characteristic.getDescription());
             }
         }
+
 
         return hash;
     }
@@ -194,8 +196,8 @@ public class UserRepository {
         user.setReady(Boolean.parseBoolean((String) hash.getOrDefault("ready", "false")));
         user.setLobbyId((String) hash.getOrDefault("lobby_id", ""));
 
-        Map<String, UserCharacteristic> characteristics = new LinkedHashMap<>();
-        for (String name : User.CHARACTERISTIC_NAMES) {
+        Map<String, SurvivorCharacteristic> characteristics = new LinkedHashMap<>();
+        for (String name : Survivor.CHARACTERISTIC_NAMES) {
             String value = (String) hash.getOrDefault(name, "");
             boolean visible = "1".equals(hash.get(name + ":visible"));
             String description = (String) hash.get(name + ":description");
@@ -203,7 +205,7 @@ public class UserRepository {
                 value = null;
                 description = null;
             }
-            characteristics.put(name, new UserCharacteristic(value, visible, description));
+            characteristics.put(name, new SurvivorCharacteristic(value, visible, description));
         }
         user.setCharacteristics(characteristics);
 

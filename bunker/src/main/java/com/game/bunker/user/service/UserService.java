@@ -1,25 +1,14 @@
 package com.game.bunker.user.service;
 
 import com.game.bunker.user.entity.User;
-import com.game.bunker.characteristic.entity.catalog.CharacteristicCatalog;
-import com.game.bunker.characteristic.entity.catalog.ExperienceCatalog;
-import com.game.bunker.characteristic.entity.catalog.ProfessionCatalog;
 import com.game.bunker.user.repository.UserRepository;
 import com.game.bunker.characteristic.repository.CharacteristicCatalogRepository;
 import com.game.bunker.characteristic.repository.ExperienceCatalogRepository;
-import com.game.bunker.characteristic.repository.ProfessionCatalogRepository;
 import org.springframework.stereotype.Service;
 
 import java.time.Duration;
-import java.util.ArrayList;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
 import java.util.NoSuchElementException;
-import java.util.concurrent.ThreadLocalRandom;
 import java.util.UUID;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 /**
  * Доменный сервис игроков.

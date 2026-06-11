@@ -1,19 +1,19 @@
 package com.game.bunker.characteristic.entity;
 
-public class UserCharacteristic {
+public class SurvivorCharacteristic {
     private String value;
     private boolean visible;
     private String description;
 
-    public UserCharacteristic() {
+    public SurvivorCharacteristic() {
     }
 
-    public UserCharacteristic(String value, boolean visible) {
+    public SurvivorCharacteristic(String value, boolean visible) {
         this.value = value;
         this.visible = visible;
     }
 
-    public UserCharacteristic(String value, boolean visible, String description) {
+    public SurvivorCharacteristic(String value, boolean visible, String description) {
         this.value = value;
         this.visible = visible;
         this.description = description;

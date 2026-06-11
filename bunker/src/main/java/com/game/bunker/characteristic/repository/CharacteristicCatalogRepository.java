@@ -1,7 +1,9 @@
 package com.game.bunker.characteristic.repository;
 
 import com.game.bunker.characteristic.entity.catalog.CharacteristicCatalog;
+import io.lettuce.core.dynamic.annotation.Param;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
 import org.springframework.stereotype.Repository;
 
 import java.util.Collection;
@@ -24,4 +26,7 @@ public interface CharacteristicCatalogRepository extends JpaRepository<Character
      * - Куда (Outbound): Spring Data JPA, таблица characteristic_catalog.
      */
     List<CharacteristicCatalog> findByTypeIn(Collection<String> types);
+
+    @Query(value = "SELECT * FROM characteristic_catalog WHERE type = :type ORDER BY RANDOM() LIMIT 1", nativeQuery = true)
+    CharacteristicCatalog findRandomByType(@Param("type") String type);
 }

@@ -1,5 +1,7 @@
 package com.game.bunker.user.entity;
 
+import lombok.Getter;
+import lombok.Setter;
 import org.jspecify.annotations.Nullable;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
@@ -10,76 +12,27 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+@Setter
+@Getter
 public class User implements UserDetails {
-    public static final List<String> CHARACTERISTIC_NAMES = List.of(
-            "profession",
-            "bio",
-            "health",
-            "hobby",
-            "character",
-            "phobia",
-            "info",
-            "baggage",
-            "cards"
-    );
 
     private String id;
     private String nickname;
     private boolean ready;
     private String lobbyId;
-    private Map<String, UserCharacteristic> characteristics = new LinkedHashMap<>();
+    private String survivorId;
 
     public User() {
     }
 
-    public User(String id, String nickname, boolean ready, String lobbyId,
-                Map<String, UserCharacteristic> characteristics) {
+    public User(String id, String nickname, boolean ready, String lobbyId, String survivorId) {
         this.id = id;
         this.nickname = nickname;
         this.ready = ready;
         this.lobbyId = lobbyId;
-        this.characteristics = characteristics;
+        this.survivorId = survivorId;
     }
 
-    public String getId() {
-        return id;
-    }
-
-    public void setId(String id) {
-        this.id = id;
-    }
-
-    public String getNickname() {
-        return nickname;
-    }
-
-    public void setNickname(String nickname) {
-        this.nickname = nickname;
-    }
-
-    public boolean isReady() {
-        return ready;
-    }
-
-    public void setReady(boolean ready) {
-        this.ready = ready;
-    }
-
-    public String getLobbyId() {
-        return lobbyId;
-    }
-
-    public void setLobbyId(String lobbyId) {
-        this.lobbyId = lobbyId;
-    }
-
-    public Map<String, UserCharacteristic> getCharacteristics() {
-        return characteristics;
-    }
-
-    public void setCharacteristics(Map<String, UserCharacteristic> characteristics) {
-        this.characteristics = characteristics;
-    }
 
     @Override
     public Collection<? extends GrantedAuthority> getAuthorities() {

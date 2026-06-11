@@ -1,13 +1,11 @@
 package com.game.bunker.characteristic.service;
 
-import com.game.bunker.user.entity.User;
-import com.game.bunker.characteristic.entity.UserCharacteristic;
+import com.game.bunker.characteristic.entity.Survivor;
+import com.game.bunker.characteristic.entity.SurvivorCharacteristic;
 import com.game.bunker.characteristic.entity.catalog.CharacteristicCatalog;
 import com.game.bunker.characteristic.entity.catalog.ExperienceCatalog;
-import com.game.bunker.characteristic.entity.catalog.ProfessionCatalog;
 import com.game.bunker.characteristic.repository.CharacteristicCatalogRepository;
 import com.game.bunker.characteristic.repository.ExperienceCatalogRepository;
-import com.game.bunker.characteristic.repository.ProfessionCatalogRepository;
 import org.springframework.stereotype.Service;
 
 import java.util.*;
@@ -22,7 +20,7 @@ public class CharacteristicGenerationService {
     private static final int MAX_EXPERIENCE_RETRIES = 100;
     private static final Pattern YEARS_PATTERN = Pattern.compile("(\\d+)\\s*(год|года|лет)", Pattern.CASE_INSENSITIVE);
     private static final Pattern MONTHS_PATTERN = Pattern.compile("(\\d+)\\s*(месяц|месяца|месяцев)", Pattern.CASE_INSENSITIVE);
-    private static final List<String> CATALOG_CHARACTERISTICS = List.of(
+    private static final List<String> CATALOG_CHARACTERISTICS_NAMES = List.of(
             "health",
             "hobby",
             "character",
@@ -32,12 +30,11 @@ public class CharacteristicGenerationService {
             "cards"
     );
 
-    private final ProfessionCatalogRepository professionCatalogRepository;
+
     private final ExperienceCatalogRepository experienceCatalogRepository;
     private final CharacteristicCatalogRepository characteristicCatalogRepository;
 
-    public CharacteristicGenerationService(ProfessionCatalogRepository professionCatalogRepository, ExperienceCatalogRepository experienceCatalogRepository, CharacteristicCatalogRepository characteristicCatalogRepository) {
-        this.professionCatalogRepository = professionCatalogRepository;
+    public CharacteristicGenerationService( ExperienceCatalogRepository experienceCatalogRepository, CharacteristicCatalogRepository characteristicCatalogRepository) {
         this.experienceCatalogRepository = experienceCatalogRepository;
         this.characteristicCatalogRepository = characteristicCatalogRepository;
     }
@@ -47,15 +44,15 @@ public class CharacteristicGenerationService {
     }
 
 
-    public Map<String, String> buildGeneratedCharacter(String nickname, String lobbyId) {
-        Map<String, UserCharacteristic> Characteristics = new LinkedHashMap<>();
+    public Map<String, SurvivorCharacteristic> createSurvivor(String nickname, String lobbyId) {
+        Map<String, SurvivorCharacteristic> survivorCharacteristics = new LinkedHashMap<>();
 
         GeneratedBioAndExperience generatedBioAndExperience = generateBioAndValidExperience();
         Map<String, CharacteristicCatalog> randomCatalogsByType = loadRandomCharacteristicByType();
-        putProfession(CharacterHash, generatedBioAndExperience.experience());
-        putBio(CharacterHash, generatedBioAndExperience.bio());
-        for (String characteristic : CATALOG_CHARACTERISTICS) {
-            putCatalogCharacteristic(CharacterHash, characteristic, randomCatalogsByType.get(characteristic));
+        putProfession(survivorCharacteristics, generatedBioAndExperience.experience());
+        putBio(survivorCharacteristics, generatedBioAndExperience.bio());
+        for (String characteristicName : CATALOG_CHARACTERISTICS_NAMES) {
+            putCatalogCharacteristic(survivorCharacteristics, characteristicName , randomCatalogsByType.get(characteristicName));
         }
 
         return CharacterHash;
@@ -73,54 +70,64 @@ public class CharacteristicGenerationService {
             }
         throw new IllegalStateException("Failed to generate valid age and experience combination");
     }
-
     private record GeneratedBioAndExperience(String bio, String experience) {
     }
 
     // TODO(senior): Загружает все значения характеристик нужных типов и выбирает в памяти; при росте каталога нужен random на уровне БД/кэша.
     private Map<String, CharacteristicCatalog> loadRandomCharacteristicByType() {
         Map<String, List<CharacteristicCatalog>> groupedCatalogs = new LinkedHashMap<>();
-        for (CharacteristicCatalog characteristic : characteristicCatalogRepository.findByTypeIn(CATALOG_CHARACTERISTICS)) {
+        for (CharacteristicCatalog characteristic : characteristicCatalogRepository.findByTypeIn(CATALOG_CHARACTERISTICS_NAMES)) {
             groupedCatalogs.computeIfAbsent(characteristic.getType(), ignored -> new ArrayList<>()).add(characteristic);
         }
 
         Map<String, CharacteristicCatalog> randomCharacteristicByType = new LinkedHashMap<>();
-        for (String type : CATALOG_CHARACTERISTICS) {
+        for (String type : CATALOG_CHARACTERISTICS_NAMES) {
             List<CharacteristicCatalog> characteristics = groupedCatalogs.get(type);
-            if (characteristics == null || characteristics.isEmpty()) {
-                throw new NoSuchElementException("Catalog is empty for characteristic: " + type);
-            }
-            randomCharacteristicByType.put(type, characteristics.get(randomInt(0, characteristics.size() - 1)));
+
         }
         return randomCharacteristicByType;
     }
 
+    private CharacteristicCatalog getRandomCharacteristic(){
+
+    }
 
     private void validateCharacteristicName(String charName) {
-        if (!User.CHARACTERISTIC_NAMES.contains(charName)) {
+        if (!Survivor.CHARACTERISTIC_NAMES.contains(charName)) {
             throw new IllegalArgumentException("Unknown characteristic: " + charName);
         }
     }
 
-    private void putProfession(Map<String, String> hash, String experience) {
-        ProfessionCatalog profession = professionCatalogRepository.findRandom()
-                .orElseThrow(() -> new NoSuchElementException("Profession catalog is empty"));
+    private void putProfession(Map<String, SurvivorCharacteristic> map, String experience) {
+        CharacteristicCatalog profession = characteristicCatalogRepository.findRandomByType("profession");
 
-        hash.put("profession", profession.getValue());
-        hash.put("profession:visible", "0");
-        hash.put("profession:description", experience);
+        SurvivorCharacteristic professionCharacteristic = new SurvivorCharacteristic(
+                profession.getValue(),
+                false,
+                experience
+        );
+        map.put("profession", professionCharacteristic);
     }
 
-    private void putBio(Map<String, String> hash, String bio) {
-        hash.put("bio", bio);
-        hash.put("bio:visible", "0");
+    private void putBio(Map<String, SurvivorCharacteristic> map, String bio) {
+        SurvivorCharacteristic bioCharacteristic = new SurvivorCharacteristic(
+                bio,
+                false,
+                null
+        );
+        map.put("bio", bioCharacteristic);
     }
 
-    private void putCatalogCharacteristic(Map<String, String> hash, String type, CharacteristicCatalog characteristic) {
-        hash.put(type, characteristic.getValue());
-        hash.put(type + ":visible", "0");
-        if (characteristic.getDescription() != null) {
-            hash.put(type + ":description", characteristic.getDescription());
-        }
+    private void putCatalogCharacteristic(Map<String, SurvivorCharacteristic> map, String type, CharacteristicCatalog catalogCharacteristic) {
+        SurvivorCharacteristic characteristic = new SurvivorCharacteristic(
+               catalogCharacteristic.getValue(),
+               false,
+                catalogCharacteristic.getDescription()
+        );
+        map.put(type, characteristic);
+    }
+
+    private boolean addToUniquenessList(){
+
     }
 }
