@@ -1,15 +1,9 @@
 package com.game.bunker.characteristic.entity;
 
-import lombok.Getter;
-import lombok.Setter;
-
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-
-@Setter
-@Getter
 public class Survivor {
     public static final List<String> CHARACTERISTIC_NAMES = List.of(
             "profession",
@@ -30,6 +24,14 @@ public class Survivor {
     }
 
     public Survivor(Map<String, SurvivorCharacteristic> character) {
+        this.character = character;
+    }
+
+    public Map<String, SurvivorCharacteristic> getCharacter() {
+        return character;
+    }
+
+    public void setCharacter(Map<String, SurvivorCharacteristic> character) {
         this.character = character;
     }
 }

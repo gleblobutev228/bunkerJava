@@ -1,6 +1,7 @@
 package com.game.bunker.lobby.service;
 
 import com.game.bunker.transport.ws.LobbyChatMessage;
+import com.game.bunker.characteristic.service.SurvivorService;
 import com.game.bunker.lobby.entity.Lobby;
 import com.game.bunker.lobby.entity.LobbyStatus;
 import com.game.bunker.user.entity.User;
@@ -25,11 +26,16 @@ public class LobbyService {
     private final LobbyRepository lobbyRepository;
     private final UserRepository userRepository;
     private final UserService userService;
+    private final SurvivorService survivorService;
 
-    public LobbyService(LobbyRepository lobbyRepository, UserRepository userRepository, UserService userService) {
+    public LobbyService(LobbyRepository lobbyRepository,
+                        UserRepository userRepository,
+                        UserService userService,
+                        SurvivorService survivorService) {
         this.lobbyRepository = lobbyRepository;
         this.userRepository = userRepository;
         this.userService = userService;
+        this.survivorService = survivorService;
     }
 
     /**
@@ -69,6 +75,7 @@ public class LobbyService {
         // TTL игрока синхронизируется с TTL лобби в Redis, чтобы состояние истекало согласованно.
         Duration ttl = lobbyRepository.getRemainingTtl(lobbyId).orElse(LobbyRepository.SESSION_TTL);
         User user = userService.generateAndSaveUser(lobbyId, nickname, ttl);
+        survivorService.generateAndSaveSurvivor(user.getSurvivorId(), nickname, lobbyId, ttl);
         lobbyRepository.addUser(lobby.getId(), user.getId());
         assignAdminIfMissing(lobby, user.getId());
         return user;
@@ -95,8 +102,12 @@ public class LobbyService {
         if (user.getId() == null || user.getId().isBlank()) {
             user.setId(UUID.randomUUID().toString());
         }
+        if (user.getSurvivorId() == null || user.getSurvivorId().isBlank()) {
+            user.setSurvivorId(user.getId());
+        }
         user.setLobbyId(lobbyId);
         user = userRepository.saveWithTtl(user, ttl);
+        survivorService.generateAndSaveSurvivor(user.getSurvivorId(), user.getNickname(), lobbyId, ttl);
         lobbyRepository.addUser(lobby.getId(), user.getId());
         assignAdminIfMissing(lobby, user.getId());
         return user;
@@ -148,7 +159,7 @@ public class LobbyService {
     public List<User> getVisibleLobbyUsers(String lobbyId) {
         Lobby lobby = lobbyRepository.findById(lobbyId)
                 .orElseThrow(() -> new NoSuchElementException("Lobby not found: " + lobbyId));
-        return userRepository.findVisibleByIds(lobby.getUserIds());
+        return userRepository.findByIds(lobby.getUserIds());
     }
 
     /**
@@ -295,6 +306,8 @@ public class LobbyService {
         List<String> affectedUserIds = List.copyOf(lobby.getUserIds());
         if (userId.equals(lobby.getAdminId())) {
             for (String playerId : affectedUserIds) {
+                User player = userService.getUser(playerId);
+                survivorService.deleteSurvivor(player.getSurvivorId());
                 userService.deleteUser(playerId);
             }
             // Redis удаляет hash лобби и set участников, потому что админ завершает комнату целиком.
@@ -302,6 +315,8 @@ public class LobbyService {
             return new LeaveLobbyResult(true, affectedUserIds);
         }
 
+        User leavingUser = userService.getUser(userId);
+        survivorService.deleteSurvivor(leavingUser.getSurvivorId());
         userService.deleteUser(userId);
         // Redis set участников обновляется только для обычного игрока; лобби остается жить.
         lobbyRepository.removeUser(lobbyId, userId);

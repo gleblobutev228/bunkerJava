@@ -34,10 +34,14 @@ public class LobbyRepository {
 
     private final StringRedisTemplate redisTemplate;
     private final ObjectMapper objectMapper;
+    private final LobbyUniquenessListRepository lobbyUniquenessListRepository;
 
-    public LobbyRepository(StringRedisTemplate redisTemplate, ObjectMapper objectMapper) {
+    public LobbyRepository(StringRedisTemplate redisTemplate,
+                           ObjectMapper objectMapper,
+                           LobbyUniquenessListRepository lobbyUniquenessListRepository) {
         this.redisTemplate = redisTemplate;
         this.objectMapper = objectMapper;
+        this.lobbyUniquenessListRepository = lobbyUniquenessListRepository;
     }
 
     /**
@@ -215,6 +219,7 @@ public class LobbyRepository {
      */
     public void deleteLobby(String lobbyId) {
         redisTemplate.delete(List.of(lobbyKey(lobbyId), lobbyUsersKey(lobbyId), lobbyChatKey(lobbyId)));
+        lobbyUniquenessListRepository.deleteByLobbyId(lobbyId);
     }
 
     /**

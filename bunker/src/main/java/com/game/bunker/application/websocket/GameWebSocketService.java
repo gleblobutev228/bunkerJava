@@ -10,6 +10,8 @@ import com.game.bunker.transport.ws.LobbyStateMessage;
 import com.game.bunker.transport.ws.LobbyStatusMessage;
 import com.game.bunker.transport.ws.LobbyStatusRequest;
 import com.game.bunker.transport.ws.OpenCharacteristicRequest;
+import com.game.bunker.transport.ws.PlayerPublicView;
+import com.game.bunker.characteristic.service.SurvivorService;
 import com.game.bunker.lobby.entity.Lobby;
 import com.game.bunker.lobby.entity.LobbyStatus;
 import com.game.bunker.lobby.service.LobbyService;
@@ -34,13 +36,16 @@ public class GameWebSocketService {
     private final RedisPubSubService redisPubSubService;
     private final LobbyService lobbyService;
     private final UserService userService;
+    private final SurvivorService survivorService;
 
     public GameWebSocketService(RedisPubSubService redisPubSubService,
                                 LobbyService lobbyService,
-                                UserService userService) {
+                                UserService userService,
+                                SurvivorService survivorService) {
         this.redisPubSubService = redisPubSubService;
         this.lobbyService = lobbyService;
         this.userService = userService;
+        this.survivorService = survivorService;
     }
 
     /**
@@ -158,7 +163,7 @@ public class GameWebSocketService {
     // TODO(senior): Открытие характеристики не проверяет принадлежность actor к lobbyId внутри домена; сейчас это доверено внешнему @PreAuthorize.
     public void openCharacteristic(String lobbyId, OpenCharacteristicRequest request, Principal principal) {
         User actor = currentUser(principal);
-        userService.openCharacteristic(actor.getId(), request.characteristicName());
+        survivorService.openCharacteristic(actor.getSurvivorId(), request.characteristicName());
         // STOMP publish сообщает всем игрокам о новом видимом состоянии персонажа через Redis.
         redisPubSubService.publishCriticalBroadcastWithRetry(
                 "/topic/game/" + lobbyId,
@@ -167,7 +172,7 @@ public class GameWebSocketService {
                         lobbyId,
                         actor.getId(),
                         "OPEN_CHARACTERISTIC",
-                        userService.getVisibleUser(actor.getId())
+                        buildPlayerPublicView(actor)
                 )
         );
     }
@@ -225,8 +230,15 @@ public class GameWebSocketService {
         redisPubSubService.publishCriticalBroadcastWithRetry(
                 "/topic/lobby/" + lobbyId,
                 RedisPubSubService.RedisWsEventType.LOBBY_STATE,
-                new LobbyStateMessage(lobbyId, lobbyService.getVisibleLobbyUsers(lobbyId))
+                new LobbyStateMessage(
+                        lobbyId,
+                        lobbyService.getVisibleLobbyUsers(lobbyId).stream().map(this::buildPlayerPublicView).toList()
+                )
         );
+    }
+
+    private PlayerPublicView buildPlayerPublicView(User user) {
+        return new PlayerPublicView(user, survivorService.getVisibleSurvivor(user.getSurvivorId()));
     }
 
     private String sanitizeChatMessage(String rawMessage) {

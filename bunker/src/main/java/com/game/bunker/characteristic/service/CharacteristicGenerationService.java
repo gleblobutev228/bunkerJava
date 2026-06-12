@@ -6,20 +6,19 @@ import com.game.bunker.characteristic.entity.catalog.CharacteristicCatalog;
 import com.game.bunker.characteristic.entity.catalog.ExperienceCatalog;
 import com.game.bunker.characteristic.repository.CharacteristicCatalogRepository;
 import com.game.bunker.characteristic.repository.ExperienceCatalogRepository;
+import com.game.bunker.lobby.repository.LobbyUniquenessListRepository;
 import org.springframework.stereotype.Service;
 
 import java.util.*;
 import java.util.concurrent.ThreadLocalRandom;
-import java.util.regex.Pattern;
 
 @Service
 public class CharacteristicGenerationService {
     private static final int MIN_AGE = 18;
     private static final int MAX_AGE = 70;
     private static final int MAX_AGE_RETRIES = 20;
-    private static final int MAX_EXPERIENCE_RETRIES = 100;
-    private static final Pattern YEARS_PATTERN = Pattern.compile("(\\d+)\\s*(год|года|лет)", Pattern.CASE_INSENSITIVE);
-    private static final Pattern MONTHS_PATTERN = Pattern.compile("(\\d+)\\s*(месяц|месяца|месяцев)", Pattern.CASE_INSENSITIVE);
+    private static final int MAX_UNIQUENESS_RETRIES = 100;
+    private static final String PROFESSION_TYPE = "profession";
     private static final List<String> CATALOG_CHARACTERISTICS_NAMES = List.of(
             "health",
             "hobby",
@@ -33,10 +32,14 @@ public class CharacteristicGenerationService {
 
     private final ExperienceCatalogRepository experienceCatalogRepository;
     private final CharacteristicCatalogRepository characteristicCatalogRepository;
+    private final LobbyUniquenessListRepository lobbyUniquenessListRepository;
 
-    public CharacteristicGenerationService( ExperienceCatalogRepository experienceCatalogRepository, CharacteristicCatalogRepository characteristicCatalogRepository) {
+    public CharacteristicGenerationService( ExperienceCatalogRepository experienceCatalogRepository,
+                                            CharacteristicCatalogRepository characteristicCatalogRepository,
+                                            LobbyUniquenessListRepository lobbyUniquenessListRepository) {
         this.experienceCatalogRepository = experienceCatalogRepository;
         this.characteristicCatalogRepository = characteristicCatalogRepository;
+        this.lobbyUniquenessListRepository = lobbyUniquenessListRepository;
     }
 
     private int randomInt(int minInclusive, int maxInclusive) {
@@ -48,14 +51,13 @@ public class CharacteristicGenerationService {
         Map<String, SurvivorCharacteristic> survivorCharacteristics = new LinkedHashMap<>();
 
         GeneratedBioAndExperience generatedBioAndExperience = generateBioAndValidExperience();
-        Map<String, CharacteristicCatalog> randomCatalogsByType = loadRandomCharacteristicByType();
-        putProfession(survivorCharacteristics, generatedBioAndExperience.experience());
         putBio(survivorCharacteristics, generatedBioAndExperience.bio());
+        survivorCharacteristics.put("profession", generateCharacteristicByType(PROFESSION_TYPE, lobbyId, generatedBioAndExperience.experience()));
         for (String characteristicName : CATALOG_CHARACTERISTICS_NAMES) {
-            putCatalogCharacteristic(survivorCharacteristics, characteristicName , randomCatalogsByType.get(characteristicName));
+            survivorCharacteristics.put(characteristicName, generateCharacteristicByType(characteristicName, lobbyId));
         }
 
-        return CharacterHash;
+        return survivorCharacteristics;
     }
 
     private GeneratedBioAndExperience generateBioAndValidExperience() {
@@ -73,23 +75,46 @@ public class CharacteristicGenerationService {
     private record GeneratedBioAndExperience(String bio, String experience) {
     }
 
-    // TODO(senior): Загружает все значения характеристик нужных типов и выбирает в памяти; при росте каталога нужен random на уровне БД/кэша.
-    private Map<String, CharacteristicCatalog> loadRandomCharacteristicByType() {
-        Map<String, List<CharacteristicCatalog>> groupedCatalogs = new LinkedHashMap<>();
-        for (CharacteristicCatalog characteristic : characteristicCatalogRepository.findByTypeIn(CATALOG_CHARACTERISTICS_NAMES)) {
-            groupedCatalogs.computeIfAbsent(characteristic.getType(), ignored -> new ArrayList<>()).add(characteristic);
-        }
-
-        Map<String, CharacteristicCatalog> randomCharacteristicByType = new LinkedHashMap<>();
-        for (String type : CATALOG_CHARACTERISTICS_NAMES) {
-            List<CharacteristicCatalog> characteristics = groupedCatalogs.get(type);
-
-        }
-        return randomCharacteristicByType;
+    public SurvivorCharacteristic generateCharacteristicByType(String type, String lobbyId) {
+        return generateCharacteristicByType(type, lobbyId, null);
     }
 
-    private CharacteristicCatalog getRandomCharacteristic(){
+    private SurvivorCharacteristic generateCharacteristicByType(String type, String lobbyId, String professionExperience) {
+        validateSupportedGenerationType(type);
+        for (int attempt = 0; attempt < MAX_UNIQUENESS_RETRIES; attempt++) {
+            CharacteristicCatalog catalogCharacteristic = characteristicCatalogRepository.findRandomByType(type);
+            if (catalogCharacteristic == null) {
+                throw new NoSuchElementException("Characteristic catalog is empty for type: " + type);
+            }
+            if (catalogCharacteristic.getId() == null) {
+                continue;
+            }
 
+            boolean isUnique = lobbyUniquenessListRepository.addIfAbsent(lobbyId, catalogCharacteristic.getId());
+            if (!isUnique) {
+                continue;
+            }
+
+            String description = buildCharacteristicDescription(type, catalogCharacteristic.getDescription(), professionExperience);
+            return new SurvivorCharacteristic(catalogCharacteristic.getValue(), false, description);
+        }
+        throw new IllegalStateException("Failed to generate unique characteristic for type: " + type);
+    }
+
+    private String buildCharacteristicDescription(String type, String originalDescription, String professionExperience) {
+        if (!PROFESSION_TYPE.equals(type)) {
+            return originalDescription;
+        }
+
+        String validExperience = professionExperience;
+        if (validExperience == null || validExperience.isBlank()) {
+            validExperience = generateBioAndValidExperience().experience();
+        }
+
+        if (originalDescription == null || originalDescription.isBlank()) {
+            return validExperience;
+        }
+        return originalDescription + "\n" + validExperience;
     }
 
     private void validateCharacteristicName(String charName) {
@@ -98,15 +123,14 @@ public class CharacteristicGenerationService {
         }
     }
 
-    private void putProfession(Map<String, SurvivorCharacteristic> map, String experience) {
-        CharacteristicCatalog profession = characteristicCatalogRepository.findRandomByType("profession");
-
-        SurvivorCharacteristic professionCharacteristic = new SurvivorCharacteristic(
-                profession.getValue(),
-                false,
-                experience
-        );
-        map.put("profession", professionCharacteristic);
+    private void validateSupportedGenerationType(String type) {
+        validateCharacteristicName(type);
+        if (PROFESSION_TYPE.equals(type)) {
+            return;
+        }
+        if (!CATALOG_CHARACTERISTICS_NAMES.contains(type)) {
+            throw new IllegalArgumentException("Generation is not supported for type: " + type);
+        }
     }
 
     private void putBio(Map<String, SurvivorCharacteristic> map, String bio) {
@@ -116,18 +140,5 @@ public class CharacteristicGenerationService {
                 null
         );
         map.put("bio", bioCharacteristic);
-    }
-
-    private void putCatalogCharacteristic(Map<String, SurvivorCharacteristic> map, String type, CharacteristicCatalog catalogCharacteristic) {
-        SurvivorCharacteristic characteristic = new SurvivorCharacteristic(
-               catalogCharacteristic.getValue(),
-               false,
-                catalogCharacteristic.getDescription()
-        );
-        map.put(type, characteristic);
-    }
-
-    private boolean addToUniquenessList(){
-
     }
 }
